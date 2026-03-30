@@ -1,0 +1,5 @@
+interviewd 2026/03/21 09:06:37.891299 listening on http://127.0.0.1:8080
+interviewd 2026/03/21 09:06:37.906310 create a session with POST /api/sessions, then connect SSE on /api/sessions/{id}/events
+interviewd 2026/03/21 09:06:39.459230 GET /api/healthz 0s
+interviewd 2026/03/21 09:06:39.480481 GET /api/healthz 0s
+interviewd 2026/03/21 09:06:39.493514 GET /api/healthz 0s

@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenInterview Test Frontend</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f3ede1;
+        --panel: rgba(255, 251, 245, 0.88);
+        --panel-strong: #fffdf8;
+        --text: #1f2933;
+        --muted: #5f6c7b;
+        --accent: #a6472b;
+        --accent-soft: rgba(166, 71, 43, 0.12);
+        --line: rgba(31, 41, 51, 0.12);
+        --danger: #b42318;
+        --success: #027a48;
+        --shadow: 0 22px 70px rgba(52, 64, 84, 0.12);
+        font-family: "Segoe UI", "SF Pro Text", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(166, 71, 43, 0.18), transparent 26%),
+          radial-gradient(circle at top right, rgba(95, 108, 123, 0.14), transparent 20%),
+          linear-gradient(180deg, #faf5eb 0%, var(--bg) 100%);
+      }
+
+      main {
+        width: min(1440px, calc(100vw - 32px));
+        margin: 24px auto 48px;
+      }
+
+      .hero {
+        padding: 28px;
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: linear-gradient(145deg, rgba(255, 253, 248, 0.96), rgba(248, 240, 227, 0.92));
+        box-shadow: var(--shadow);
+      }
+
+      .hero h1 {
+        margin: 0 0 12px;
+        font-size: clamp(2rem, 4vw, 3.5rem);
+        line-height: 1;
+        letter-spacing: -0.05em;
+      }
+
+      .hero p {
+        margin: 0;
+        max-width: 980px;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .grid {
+        display: grid;
+        gap: 18px;
+        margin-top: 18px;
+      }
+
+      .grid.top {
+        grid-template-columns: 1.1fr 0.9fr;
+      }
+
+      .grid.bottom {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        align-items: start;
+      }
+
+      .card {
+        min-width: 0;
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: var(--panel);
+        backdrop-filter: blur(12px);
+        box-shadow: var(--shadow);
+      }
+
+      .card h2 {
+        margin: 0;
+        font-size: 1.15rem;
+        letter-spacing: -0.03em;
+      }
+
+      .card .sub {
+        margin-top: 8px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .toolbar,
+      .row,
+      .status-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .toolbar {
+        margin-top: 16px;
+      }
+
+      .row {
+        margin-top: 14px;
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+        flex: 1 1 220px;
+      }
+
+      label {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      input,
+      textarea,
+      button {
+        font: inherit;
+      }
+
+      input,
+      textarea {
+        width: 100%;
+        border: 1px solid rgba(31, 41, 51, 0.14);
+        border-radius: 14px;
+        padding: 12px 14px;
+        background: rgba(255, 255, 255, 0.82);
+        color: var(--text);
+      }
+
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 11px 18px;
+        cursor: pointer;
+        background: var(--accent);
+        color: white;
+        transition: transform 150ms ease, opacity 150ms ease;
+      }
+
+      button.secondary {
+        background: rgba(31, 41, 51, 0.08);
+        color: var(--text);
+      }
+
+      button.ghost {
+        background: rgba(166, 71, 43, 0.1);
+        color: var(--accent);
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      button:hover:not(:disabled) {
+        transform: translateY(-1px);
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 12px;
+        border-radius: 999px;
+        background: rgba(31, 41, 51, 0.05);
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .pill strong {
+        color: var(--text);
+      }
+
+      .pill.good {
+        background: rgba(2, 122, 72, 0.1);
+        color: var(--success);
+      }
+
+      .pill.bad {
+        background: rgba(180, 35, 24, 0.1);
+        color: var(--danger);
+      }
+
+      .panel {
+        margin-top: 16px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 14px;
+        background: var(--panel-strong);
+      }
+
+      .panel h3 {
+        margin: 0 0 12px;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .stack {
+        display: grid;
+        gap: 12px;
+      }
+
+      .stream {
+        min-height: 120px;
+        white-space: pre-wrap;
+        line-height: 1.7;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .log {
+        min-height: 180px;
+        max-height: 280px;
+        overflow: auto;
+        padding: 14px;
+        border-radius: 18px;
+        background: #151a1f;
+        color: #ecf0f3;
+        font: 0.88rem/1.65 "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+        white-space: pre-wrap;
+      }
+
+      .final-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .final-item {
+        padding: 12px;
+        border-radius: 14px;
+        background: rgba(166, 71, 43, 0.08);
+      }
+
+      .footer-note {
+        margin-top: 18px;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      @media (max-width: 1120px) {
+        .grid.top,
+        .grid.bottom {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>OpenInterview Test Console</h1>
+        <p>
+          This test frontend is intentionally lightweight. It can drive the
+          backend session flow, connect directly to your sherpa websocket STT
+          service, and validate the combined real-time transcript plus streamed
+          answer path without adding a frontend framework.
+        </p>
+      </section>
+
+      <section class="grid top">
+        <article class="card">
+          <h2>Runtime</h2>
+          <p class="sub">
+            Configure local endpoints, create a backend session, save profile,
+            and inspect high-level state before starting the dedicated test
+            panels below.
+          </p>
+
+          <div class="row">
+            <div class="field">
+              <label for="backendBaseUrl">Backend Base URL</label>
+              <input id="backendBaseUrl" value="http://localhost:8080" />
+            </div>
+            <div class="field">
+              <label for="sttWsUrl">STT WebSocket URL</label>
+              <input id="sttWsUrl" value="ws://127.0.0.1:6006/" />
+            </div>
+          </div>
+
+          <div class="toolbar">
+            <button id="createSessionBtn">Create Session</button>
+            <button id="openEventsBtn" class="secondary">Open Events</button>
+            <button id="resetSessionBtn" class="ghost">Reset Session</button>
+          </div>
+
+          <div class="status-pills row">
+            <div class="pill"><span>Session</span><strong id="sessionId">none</strong></div>
+            <div class="pill"><span>Listening</span><strong id="listeningState">false</strong></div>
+            <div class="pill"><span>Answering</span><strong id="answeringState">false</strong></div>
+            <div class="pill"><span>Audio Chunks</span><strong id="audioChunks">0</strong></div>
+            <div class="pill"><span>Audio Bytes</span><strong id="audioBytes">0</strong></div>
+          </div>
+
+          <div class="panel">
+            <h3>Candidate Profile</h3>
+            <div class="stack">
+              <div class="field">
+                <label for="targetRole">Target Role</label>
+                <input id="targetRole" placeholder="Senior Backend Engineer" />
+              </div>
+              <div class="field">
+                <label for="techStack">Tech Stack</label>
+                <input id="techStack" placeholder="Go, Redis, Kafka, MySQL" />
+              </div>
+              <div class="field">
+                <label for="projectSummary">Project Summary</label>
+                <textarea id="projectSummary"></textarea>
+              </div>
+              <div class="field">
+                <label for="strengths">Strengths</label>
+                <textarea id="strengths"></textarea>
+              </div>
+              <div class="field">
+                <label for="answerStyle">Answer Style</label>
+                <textarea id="answerStyle" placeholder="Concise, structured, concrete."></textarea>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <button id="saveProfileBtn">Save Profile</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <h2>Backend Session View</h2>
+          <p class="sub">
+            These areas mirror the latest session snapshot and backend events.
+            They help confirm whether the service sees the same transcript and
+            streamed answer state that the test panels are rendering.
+          </p>
+
+          <div class="panel">
+            <h3>Current Question</h3>
+            <div id="backendQuestion" class="stream muted">No question yet.</div>
+          </div>
+
+          <div class="panel">
+            <h3>Current Answer</h3>
+            <div id="backendAnswer" class="stream muted">No answer yet.</div>
+          </div>
+
+          <div class="panel">
+            <h3>Session History</h3>
+            <div id="historyList" class="final-list muted">No turns yet.</div>
+          </div>
+
+          <div class="panel">
+            <h3>Backend Event Log</h3>
+            <div id="backendLog" class="log"></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="grid bottom">
+        <article class="card">
+          <h2>STT Direct</h2>
+          <p class="sub">
+            Browser microphone goes straight to the sherpa websocket service.
+            This bypasses the backend so you can isolate STT transport and
+            recognition behavior.
+          </p>
+
+          <div class="toolbar">
+            <button id="startSttDirectBtn">Start Mic</button>
+            <button id="stopSttDirectBtn" class="secondary">Stop Mic</button>
+            <button id="clearSttDirectBtn" class="ghost">Clear</button>
+          </div>
+
+          <div class="panel">
+            <h3>Partial Transcript</h3>
+            <div id="sttDirectPartial" class="stream muted">Waiting for audio.</div>
+          </div>
+
+          <div class="panel">
+            <h3>Final Segments</h3>
+            <div id="sttDirectFinals" class="final-list muted">No final segments yet.</div>
+          </div>
+
+          <div class="panel">
+            <h3>Direct STT Log</h3>
+            <div id="sttDirectLog" class="log"></div>
+          </div>
+        </article>
+
+        <article class="card">
+          <h2>LLM Only</h2>
+          <p class="sub">
+            This drives the backend session and Groq integration without
+            microphone input. It is useful for prompt, profile, and streaming
+            answer validation in isolation.
+          </p>
+
+          <div class="field">
+            <label for="askQuestion">Question</label>
+            <textarea id="askQuestion" placeholder="Tell me about a project where you handled high concurrency."></textarea>
+          </div>
+
+          <div class="toolbar">
+            <button id="askQuestionBtn">Ask via Backend</button>
+            <button id="clearLlmOnlyBtn" class="ghost">Clear</button>
+          </div>
+
+          <div class="panel">
+            <h3>LLM Stream</h3>
+            <div id="llmOnlyAnswer" class="stream muted">Waiting for a manual question.</div>
+          </div>
+
+          <div class="panel">
+            <h3>LLM Log</h3>
+            <div id="llmOnlyLog" class="log"></div>
+          </div>
+        </article>
+
+        <article class="card">
+          <h2>Integrated</h2>
+          <p class="sub">
+            Browser microphone sends PCM16 chunks to the backend. The backend
+            forwards audio to sherpa, performs question detection, and streams
+            the final answer back over SSE.
+          </p>
+
+          <div class="toolbar">
+            <button id="startIntegratedBtn">Start Listening</button>
+            <button id="stopIntegratedBtn" class="secondary">Stop Listening</button>
+            <button id="clearIntegratedBtn" class="ghost">Clear</button>
+          </div>
+
+          <div class="panel">
+            <h3>Integrated Partial Transcript</h3>
+            <div id="integratedPartial" class="stream muted">Waiting for backend transcript.</div>
+          </div>
+
+          <div class="panel">
+            <h3>Integrated Final Transcripts</h3>
+            <div id="integratedFinals" class="final-list muted">No final transcripts yet.</div>
+          </div>
+
+          <div class="panel">
+            <h3>Detected Question</h3>
+            <div id="integratedQuestion" class="stream muted">No question detected yet.</div>
+          </div>
+
+          <div class="panel">
+            <h3>Integrated Answer Stream</h3>
+            <div id="integratedAnswer" class="stream muted">Waiting for backend answer stream.</div>
+          </div>
+
+          <div class="panel">
+            <h3>Integrated Log</h3>
+            <div id="integratedLog" class="log"></div>
+          </div>
+        </article>
+      </section>
+
+      <p class="footer-note">
+        Mic capture uses browser Web Audio APIs and assumes the backend expects
+        16 kHz mono PCM16. The direct STT mode converts the same captured audio
+        to float32 frames because your sherpa websocket server expects that wire
+        format.
+      </p>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
