@@ -36,8 +36,21 @@ type AudioConfig struct {
 
 type STTConfig struct {
 	Provider string
-	Port     int
-	WSURL    string
+	Sherpa   *SherpaConfig
+	Tencent  *TencentConfig
+}
+
+type SherpaConfig struct {
+	WSURL string
+}
+
+type TencentConfig struct {
+	WSURL      string
+	AppID      string
+	SecretID   string
+	SecretKey  string
+	EngineType string
+	NeedVAD    int
 }
 
 type LLMConfig struct {
@@ -54,7 +67,6 @@ type LLMConfig struct {
 func Load() Config {
 	loadDotEnv(filepath.Join(".", ".env"))
 
-	sttPort := envInt("INTERVIEW_STT_PORT", 6006)
 	sttProvider := strings.ToLower(envString("INTERVIEW_STT_PROVIDER", "mock"))
 	llmProvider := strings.ToLower(envString("INTERVIEW_LLM_PROVIDER", "mock"))
 
@@ -73,8 +85,17 @@ func Load() Config {
 		},
 		STT: STTConfig{
 			Provider: sttProvider,
-			Port:     sttPort,
-			WSURL:    envString("INTERVIEW_STT_WS_URL", defaultSTTWSURL(sttPort)),
+			Sherpa: &SherpaConfig{
+				WSURL: envString("INTERVIEW_SHERPA_WS_URL", ""),
+			},
+			Tencent: &TencentConfig{
+				WSURL:      envString("INTERVIEW_TENCENT_WS_URL", ""),
+				AppID:      envString("INTERVIEW_TENCENT_APP_ID", ""),
+				SecretID:   envString("INTERVIEW_TENCENT_SECRET_ID", ""),
+				SecretKey:  envString("INTERVIEW_TENCENT_SECRET_KEY", ""),
+				EngineType: envString("INTERVIEW_TENCENT_ENGINE_TYPE", "16k_zh"),
+				NeedVAD:    envInt("INTERVIEW_TENCENT_NEED_VAD", 0),
+			},
 		},
 		LLM: LLMConfig{
 			Provider:     llmProvider,
@@ -90,10 +111,6 @@ func Load() Config {
 }
 
 const defaultSystemPrompt = "You are a local interview copilot. Help the candidate answer interview questions in a concise, credible, first-person style. Use the candidate profile and recent context, do not invent experience, and reply in the same language as the question."
-
-func defaultSTTWSURL(port int) string {
-	return "ws://localhost:" + strconv.Itoa(port) + "/"
-}
 
 func defaultLLMBaseURL(provider string) string {
 	if provider == "groq" {

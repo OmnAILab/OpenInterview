@@ -10,7 +10,21 @@ import (
 
 type Config struct {
 	Provider string
-	WSURL    string
+	Sherpa   *SherpaConfig
+	Tencent  *TencentConfig
+}
+
+type SherpaConfig struct {
+	WSURL string
+}
+
+type TencentConfig struct {
+	WSURL      string
+	AppID      string
+	SecretID   string
+	SecretKey  string
+	EngineType string
+	NeedVAD    int
 }
 
 type EventKind string
@@ -54,8 +68,25 @@ func NewFactory(cfg Config, logger *log.Logger) Factory {
 		return &mockFactory{logger: logger}
 	case "sherpa", "sherpa-websocket", "sherpa_onnx", "sherpa-onnx":
 		return &sherpaWebSocketFactory{
-			wsURL:  cfg.WSURL,
+			wsURL:  cfg.Sherpa.WSURL,
 			logger: logger,
+		}
+	case "tencent", "tencent-asr":
+		// if cfg.Tencent == nil {
+		// 	return &unsupportedFactory{
+		// 		err: fmt.Errorf("tencent asr config is not provided"),
+		// 	}
+		// }
+		return &tencentAsrFactory{
+			config: TencentAsrConfig{
+				WSURL:      cfg.Tencent.WSURL,
+				AppID:      cfg.Tencent.AppID,
+				SecretID:   cfg.Tencent.SecretID,
+				SecretKey:  cfg.Tencent.SecretKey,
+				EngineType: cfg.Tencent.EngineType,
+				NeedVAD:    cfg.Tencent.NeedVAD,
+				Logger:     logger,
+			},
 		}
 	default:
 		return &unsupportedFactory{

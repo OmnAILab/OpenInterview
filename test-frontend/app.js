@@ -1,9 +1,12 @@
 const elements = {
   backendBaseUrl: document.getElementById("backendBaseUrl"),
-  sttWsUrl: document.getElementById("sttWsUrl"),
+  refreshRuntimeBtn: document.getElementById("refreshRuntimeBtn"),
   createSessionBtn: document.getElementById("createSessionBtn"),
   openEventsBtn: document.getElementById("openEventsBtn"),
   resetSessionBtn: document.getElementById("resetSessionBtn"),
+  runtimeSttProvider: document.getElementById("runtimeSttProvider"),
+  runtimeLlmProvider: document.getElementById("runtimeLlmProvider"),
+  runtimeLlmModel: document.getElementById("runtimeLlmModel"),
   saveProfileBtn: document.getElementById("saveProfileBtn"),
   targetRole: document.getElementById("targetRole"),
   techStack: document.getElementById("techStack"),
@@ -19,12 +22,12 @@ const elements = {
   backendAnswer: document.getElementById("backendAnswer"),
   historyList: document.getElementById("historyList"),
   backendLog: document.getElementById("backendLog"),
-  startSttDirectBtn: document.getElementById("startSttDirectBtn"),
-  stopSttDirectBtn: document.getElementById("stopSttDirectBtn"),
-  clearSttDirectBtn: document.getElementById("clearSttDirectBtn"),
-  sttDirectPartial: document.getElementById("sttDirectPartial"),
-  sttDirectFinals: document.getElementById("sttDirectFinals"),
-  sttDirectLog: document.getElementById("sttDirectLog"),
+  startSttOnlyBtn: document.getElementById("startSttOnlyBtn"),
+  stopSttOnlyBtn: document.getElementById("stopSttOnlyBtn"),
+  clearSttOnlyBtn: document.getElementById("clearSttOnlyBtn"),
+  sttOnlyPartial: document.getElementById("sttOnlyPartial"),
+  sttOnlyFinals: document.getElementById("sttOnlyFinals"),
+  sttOnlyLog: document.getElementById("sttOnlyLog"),
   askQuestion: document.getElementById("askQuestion"),
   askQuestionBtn: document.getElementById("askQuestionBtn"),
   clearLlmOnlyBtn: document.getElementById("clearLlmOnlyBtn"),
@@ -62,16 +65,16 @@ const state = {
   eventSource: null,
   capture: null,
   backendSnapshot: null,
-  integrated: {
+  runtime: emptyRuntimeState(),
+  sttOnly: {
+    sessionId: "",
+    eventSource: null,
     finals: [],
     sendChain: Promise.resolve(),
   },
-  direct: {
-    ws: null,
-    activeSegment: -1,
-    activeText: "",
-    lastFinalSegment: -1,
+  integrated: {
     finals: [],
+    sendChain: Promise.resolve(),
   },
 };
 
@@ -80,25 +83,28 @@ boot();
 function boot() {
   bindActions();
   renderEmptyState();
-  appendLog(elements.backendLog, "Ready. Configure endpoints and create a session.");
+  appendLog(elements.backendLog, "Ready. Configure the backend URL, refresh runtime, then create a session.");
+  void refreshBackendRuntime({ quiet: true });
   window.addEventListener("beforeunload", () => {
     closeBackendEvents();
-    if (state.direct.ws) {
-      state.direct.ws.close();
-    }
+    closeSTTOnlyEvents();
   });
 }
 
 function bindActions() {
+  elements.backendBaseUrl.addEventListener("change", () => {
+    void refreshBackendRuntime({ quiet: true });
+  });
+  elements.refreshRuntimeBtn.addEventListener("click", () => runAction(refreshBackendRuntime));
   elements.createSessionBtn.addEventListener("click", () => runAction(createBackendSession));
   elements.openEventsBtn.addEventListener("click", () => runAction(openBackendEvents));
   elements.resetSessionBtn.addEventListener("click", () => runAction(resetBackendSession));
   elements.saveProfileBtn.addEventListener("click", () => runAction(saveProfile));
+  elements.startSttOnlyBtn.addEventListener("click", () => runAction(startSTTOnly));
+  elements.stopSttOnlyBtn.addEventListener("click", () => runAction(stopSTTOnly));
+  elements.clearSttOnlyBtn.addEventListener("click", clearSTTOnlyPanel);
   elements.askQuestionBtn.addEventListener("click", () => runAction(askManualQuestion));
   elements.clearLlmOnlyBtn.addEventListener("click", clearLlmOnlyPanel);
-  elements.startSttDirectBtn.addEventListener("click", () => runAction(startDirectStt));
-  elements.stopSttDirectBtn.addEventListener("click", () => runAction(stopDirectStt));
-  elements.clearSttDirectBtn.addEventListener("click", clearDirectPanel);
   elements.startIntegratedBtn.addEventListener("click", () => runAction(startIntegrated));
   elements.stopIntegratedBtn.addEventListener("click", () => runAction(stopIntegrated));
   elements.clearIntegratedBtn.addEventListener("click", clearIntegratedPanel);
@@ -110,18 +116,37 @@ async function runAction(action) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     appendLog(elements.backendLog, `ERROR: ${message}`);
+    appendLog(elements.sttOnlyLog, `ERROR: ${message}`);
     appendLog(elements.integratedLog, `ERROR: ${message}`);
     appendLog(elements.llmOnlyLog, `ERROR: ${message}`);
-    appendLog(elements.sttDirectLog, `ERROR: ${message}`);
   }
 }
 
 async function createBackendSession() {
+  await refreshBackendRuntime({ quiet: true });
   const snapshot = await requestJSON("POST", "/api/sessions");
   state.sessionId = snapshot.id;
   appendLog(elements.backendLog, `Created session ${state.sessionId}`);
   applySnapshot(snapshot);
   await openBackendEvents();
+}
+
+async function refreshBackendRuntime(options = {}) {
+  const { quiet = false } = options;
+
+  try {
+    const health = await requestJSON("GET", "/api/healthz");
+    applyBackendRuntime(health);
+    if (!quiet) {
+      appendLog(elements.backendLog, "Loaded backend runtime configuration.");
+    }
+  } catch (error) {
+    state.runtime = emptyRuntimeState();
+    renderRuntimeState();
+    if (!quiet) {
+      throw error;
+    }
+  }
 }
 
 async function openBackendEvents() {
@@ -166,6 +191,69 @@ function closeBackendEvents() {
   if (state.eventSource) {
     state.eventSource.close();
     state.eventSource = null;
+  }
+}
+
+async function ensureSTTOnlySession() {
+  if (!state.sttOnly.sessionId) {
+    const snapshot = await requestJSON("POST", "/api/sessions");
+    state.sttOnly.sessionId = snapshot.id;
+    applySTTOnlySnapshot(snapshot);
+    appendLog(elements.sttOnlyLog, `Created dedicated STT session ${state.sttOnly.sessionId}`);
+  }
+
+  if (!state.sttOnly.eventSource) {
+    openSTTOnlyEvents();
+  }
+
+  return state.sttOnly.sessionId;
+}
+
+function openSTTOnlyEvents() {
+  if (!state.sttOnly.sessionId) {
+    throw new Error("No STT-only session. Start the STT test first.");
+  }
+
+  closeSTTOnlyEvents();
+
+  const eventsUrl = `${backendBaseURL()}/api/sessions/${encodeURIComponent(state.sttOnly.sessionId)}/events`;
+  const source = new EventSource(eventsUrl);
+  state.sttOnly.eventSource = source;
+
+  source.addEventListener("snapshot", (event) => {
+    try {
+      const snapshot = parseJSON(event.data, "stt-only snapshot");
+      applySTTOnlySnapshot(snapshot);
+      appendLog(elements.sttOnlyLog, "Received STT-only snapshot event.");
+    } catch (error) {
+      appendLog(elements.sttOnlyLog, error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  for (const type of ["stt.partial", "stt.final", "error", "log"]) {
+    source.addEventListener(type, (event) => {
+      try {
+        const record = parseJSON(event.data, `stt-only ${type}`);
+        handleSTTOnlyEvent(type, record);
+      } catch (error) {
+        appendLog(elements.sttOnlyLog, error instanceof Error ? error.message : String(error));
+      }
+    });
+  }
+
+  source.onopen = () => {
+    appendLog(elements.sttOnlyLog, `SSE connected for dedicated STT session ${state.sttOnly.sessionId}`);
+  };
+
+  source.onerror = () => {
+    appendLog(elements.sttOnlyLog, "STT-only SSE connection reported an error. Browser will retry automatically.");
+  };
+}
+
+function closeSTTOnlyEvents() {
+  if (state.sttOnly.eventSource) {
+    state.sttOnly.eventSource.close();
+    state.sttOnly.eventSource = null;
   }
 }
 
@@ -214,55 +302,35 @@ async function askManualQuestion() {
   appendLog(elements.llmOnlyLog, `Asked question: ${question}`);
 }
 
-async function startDirectStt() {
-  if (state.direct.ws && state.direct.ws.readyState === WebSocket.OPEN) {
-    throw new Error("Direct STT websocket is already open");
-  }
+async function startSTTOnly() {
+  ensureCaptureAvailable("stt-only");
+  clearSTTOnlyPanel();
+  const sessionID = await ensureSTTOnlySession();
 
-  clearDirectPanel();
-  const ws = await openWebSocket(elements.sttWsUrl.value.trim());
-  state.direct.ws = ws;
-  appendLog(elements.sttDirectLog, `WebSocket connected: ${elements.sttWsUrl.value.trim()}`);
+  await requestJSON("POST", `/api/sessions/${sessionID}/reset`);
+  await requestJSON("POST", `/api/sessions/${sessionID}/listen/start`);
+  appendLog(elements.sttOnlyLog, "Dedicated STT listening started.");
 
-  ws.addEventListener("message", (event) => {
-    const message = parseJSON(String(event.data), "direct stt message");
-    handleDirectSttMessage(message);
+  state.sttOnly.sendChain = Promise.resolve();
+
+  await startMicCapture("stt-only", (samples) => {
+    const pcm = float32ToPCM16(samples);
+    queueSTTOnlyChunk(pcm.buffer.slice(0));
   });
-
-  ws.addEventListener("close", () => {
-    flushDirectFinal();
-    appendLog(elements.sttDirectLog, "Direct STT websocket closed.");
-    state.direct.ws = null;
-  });
-
-  ws.addEventListener("error", () => {
-    appendLog(elements.sttDirectLog, "Direct STT websocket reported an error.");
-  });
-
-  await startMicCapture("stt-direct", (samples) => {
-    if (!state.direct.ws || state.direct.ws.readyState !== WebSocket.OPEN) {
-      return;
-    }
-    state.direct.ws.send(samples.buffer.slice(0));
-  });
-
-  appendLog(elements.sttDirectLog, "Microphone streaming started for direct STT.");
 }
 
-async function stopDirectStt() {
-  await stopIfCapturing("stt-direct");
-  if (state.direct.ws && state.direct.ws.readyState === WebSocket.OPEN) {
-    state.direct.ws.send("Done");
-    appendLog(elements.sttDirectLog, "Sent Done to sherpa websocket.");
-    window.setTimeout(() => {
-      if (state.direct.ws && state.direct.ws.readyState === WebSocket.OPEN) {
-        state.direct.ws.close();
-      }
-    }, 1500);
+async function stopSTTOnly() {
+  await stopIfCapturing("stt-only");
+  await state.sttOnly.sendChain.catch(() => {});
+
+  if (state.sttOnly.sessionId) {
+    await requestJSON("POST", `/api/sessions/${state.sttOnly.sessionId}/listen/stop`);
+    appendLog(elements.sttOnlyLog, "Dedicated STT listening stopped.");
   }
 }
 
 async function startIntegrated() {
+  ensureCaptureAvailable("integrated");
   if (!state.sessionId) {
     await createBackendSession();
   } else if (!state.eventSource) {
@@ -305,9 +373,42 @@ function queueIntegratedChunk(payload) {
     });
 }
 
+function queueSTTOnlyChunk(payload) {
+  if (!state.sttOnly.sessionId) {
+    return;
+  }
+
+  state.sttOnly.sendChain = state.sttOnly.sendChain
+    .catch(() => {})
+    .then(() => postSTTOnlyChunk(payload))
+    .catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      appendLog(elements.sttOnlyLog, `Audio upload error: ${message}`);
+    });
+}
+
 async function postAudioChunk(payload) {
   ensureSessionId();
   const url = `${backendBaseURL()}/api/sessions/${encodeURIComponent(state.sessionId)}/audio?sampleRate=16000&channels=1&encoding=pcm16`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/octet-stream",
+    },
+    body: payload,
+  });
+
+  if (!response.ok) {
+    throw new Error(await responseError(response));
+  }
+}
+
+async function postSTTOnlyChunk(payload) {
+  if (!state.sttOnly.sessionId) {
+    throw new Error("No STT-only session. Start the STT test first.");
+  }
+
+  const url = `${backendBaseURL()}/api/sessions/${encodeURIComponent(state.sttOnly.sessionId)}/audio?sampleRate=16000&channels=1&encoding=pcm16`;
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -388,51 +489,38 @@ async function stopIfCapturing(mode) {
   await capture.stop();
 }
 
-function handleDirectSttMessage(message) {
-  appendLog(elements.sttDirectLog, JSON.stringify(message));
-
-  if (typeof message.segment !== "number") {
-    return;
+function ensureCaptureAvailable(mode) {
+  if (state.capture && state.capture.mode !== mode) {
+    throw new Error(`Capture is active in mode ${state.capture.mode}`);
   }
-
-  const text = typeof message.text === "string" ? message.text.trim() : "";
-  const currentSegment = message.segment;
-
-  if (state.direct.activeSegment === -1) {
-    state.direct.activeSegment = currentSegment;
-    state.direct.activeText = text;
-    setStreamText(elements.sttDirectPartial, text, "Waiting for audio.");
-    return;
-  }
-
-  if (currentSegment < state.direct.activeSegment) {
-    return;
-  }
-
-  if (currentSegment === state.direct.activeSegment) {
-    if (text && text !== state.direct.activeText) {
-      state.direct.activeText = text;
-      setStreamText(elements.sttDirectPartial, text, "Waiting for audio.");
-    }
-    return;
-  }
-
-  flushDirectFinal();
-  state.direct.activeSegment = currentSegment;
-  state.direct.activeText = text;
-  setStreamText(elements.sttDirectPartial, text, "Waiting for audio.");
 }
 
-function flushDirectFinal() {
-  const text = state.direct.activeText.trim();
-  const segment = state.direct.activeSegment;
-  if (!text || segment < 0 || segment <= state.direct.lastFinalSegment) {
-    return;
+function handleSTTOnlyEvent(type, record) {
+  const payload = record && typeof record === "object" ? record.data || {} : {};
+  switch (type) {
+    case "stt.partial":
+      setStreamText(elements.sttOnlyPartial, payload.text || "", "Waiting for backend transcript.");
+      appendLog(elements.sttOnlyLog, `Partial: ${payload.text || ""}`);
+      break;
+    case "stt.final":
+      if (payload.text) {
+        state.sttOnly.finals.push(payload.text);
+        renderFinalList(elements.sttOnlyFinals, state.sttOnly.finals, "No final transcripts yet.");
+      }
+      setStreamText(elements.sttOnlyPartial, "", "Waiting for backend transcript.");
+      appendLog(elements.sttOnlyLog, `Final: ${payload.text || ""}`);
+      break;
+    case "error":
+      appendLog(elements.sttOnlyLog, `Backend error: ${payload.message || "unknown error"}`);
+      break;
+    case "log":
+      if (payload.scope === "stt" || payload.scope === "audio") {
+        appendLog(elements.sttOnlyLog, JSON.stringify(payload));
+      }
+      break;
+    default:
+      break;
   }
-
-  state.direct.finals.push(text);
-  state.direct.lastFinalSegment = segment;
-  renderFinalList(elements.sttDirectFinals, state.direct.finals, "No final segments yet.");
 }
 
 function handleBackendEvent(type, record) {
@@ -544,6 +632,38 @@ function applySnapshot(snapshot) {
   fillProfileForm(snapshot.profile || {});
 }
 
+function applySTTOnlySnapshot(snapshot) {
+  state.sttOnly.sessionId = snapshot.id || state.sttOnly.sessionId;
+  state.sttOnly.finals = Array.isArray(snapshot.finalTranscripts) ? [...snapshot.finalTranscripts] : [];
+
+  setStreamText(elements.sttOnlyPartial, snapshot.partialTranscript || "", "Waiting for backend transcript.");
+  renderFinalList(elements.sttOnlyFinals, state.sttOnly.finals, "No final transcripts yet.");
+}
+
+function applyBackendRuntime(health) {
+  const runtime = health && typeof health === "object" ? health.runtime || {} : {};
+  const stt = runtime && typeof runtime === "object" ? runtime.stt || {} : {};
+  const llm = runtime && typeof runtime === "object" ? runtime.llm || {} : {};
+
+  state.runtime = {
+    stt: {
+      provider: typeof stt.provider === "string" ? stt.provider : "",
+    },
+    llm: {
+      provider: typeof llm.provider === "string" ? llm.provider : "",
+      model: typeof llm.model === "string" ? llm.model : "",
+    },
+  };
+
+  renderRuntimeState();
+}
+
+function renderRuntimeState() {
+  elements.runtimeSttProvider.textContent = state.runtime.stt.provider || "unknown";
+  elements.runtimeLlmProvider.textContent = state.runtime.llm.provider || "unknown";
+  elements.runtimeLlmModel.textContent = state.runtime.llm.model || "unknown";
+}
+
 function fillProfileForm(profile) {
   elements.targetRole.value = profile.targetRole || "";
   elements.techStack.value = Array.isArray(profile.techStack) ? profile.techStack.join(", ") : "";
@@ -585,14 +705,11 @@ function renderFinalList(container, items, emptyText) {
     .join("");
 }
 
-function clearDirectPanel() {
-  state.direct.activeSegment = -1;
-  state.direct.activeText = "";
-  state.direct.lastFinalSegment = -1;
-  state.direct.finals = [];
-  setStreamText(elements.sttDirectPartial, "", "Waiting for audio.");
-  renderFinalList(elements.sttDirectFinals, [], "No final segments yet.");
-  elements.sttDirectLog.textContent = "";
+function clearSTTOnlyPanel() {
+  state.sttOnly.finals = [];
+  setStreamText(elements.sttOnlyPartial, "", "Waiting for backend transcript.");
+  renderFinalList(elements.sttOnlyFinals, [], "No final transcripts yet.");
+  elements.sttOnlyLog.textContent = "";
 }
 
 function clearIntegratedPanel() {
@@ -610,9 +727,11 @@ function clearLlmOnlyPanel() {
 }
 
 function renderEmptyState() {
-  clearDirectPanel();
+  state.runtime = emptyRuntimeState();
+  clearSTTOnlyPanel();
   clearIntegratedPanel();
   clearLlmOnlyPanel();
+  renderRuntimeState();
   elements.sessionId.textContent = "none";
   elements.listeningState.textContent = "false";
   elements.answeringState.textContent = "false";
@@ -622,6 +741,18 @@ function renderEmptyState() {
   setStreamText(elements.backendAnswer, "", "No answer yet.");
   elements.historyList.textContent = "No turns yet.";
   elements.historyList.classList.add("muted");
+}
+
+function emptyRuntimeState() {
+  return {
+    stt: {
+      provider: "",
+    },
+    llm: {
+      provider: "",
+      model: "",
+    },
+  };
 }
 
 function setStreamText(element, text, fallback) {
@@ -746,29 +877,4 @@ async function responseError(response) {
   } catch {
     return text || `${response.status} ${response.statusText}`;
   }
-}
-
-function openWebSocket(url) {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
-    ws.binaryType = "arraybuffer";
-
-    const cleanup = () => {
-      ws.removeEventListener("open", handleOpen);
-      ws.removeEventListener("error", handleError);
-    };
-
-    const handleOpen = () => {
-      cleanup();
-      resolve(ws);
-    };
-
-    const handleError = () => {
-      cleanup();
-      reject(new Error(`Failed to open websocket: ${url}`));
-    };
-
-    ws.addEventListener("open", handleOpen);
-    ws.addEventListener("error", handleError);
-  });
 }

@@ -278,9 +278,9 @@
         <h1>OpenInterview Test Console</h1>
         <p>
           This test frontend is intentionally lightweight. It can drive the
-          backend session flow, connect directly to your sherpa websocket STT
-          service, and validate the combined real-time transcript plus streamed
-          answer path without adding a frontend framework.
+          backend session flow, capture microphone audio, and validate the
+          combined real-time transcript plus streamed answer path without
+          adding a frontend framework.
         </p>
       </section>
 
@@ -288,9 +288,9 @@
         <article class="card">
           <h2>Runtime</h2>
           <p class="sub">
-            Configure local endpoints, create a backend session, save profile,
-            and inspect high-level state before starting the dedicated test
-            panels below.
+            Only the backend base URL is configured here. The page reads the
+            active STT and LLM settings from the backend, then uses those
+            runtime settings for the backend-driven test panels below.
           </p>
 
           <div class="row">
@@ -298,16 +298,19 @@
               <label for="backendBaseUrl">Backend Base URL</label>
               <input id="backendBaseUrl" value="http://localhost:8080" />
             </div>
-            <div class="field">
-              <label for="sttWsUrl">STT WebSocket URL</label>
-              <input id="sttWsUrl" value="ws://127.0.0.1:6006/" />
-            </div>
           </div>
 
           <div class="toolbar">
+            <button id="refreshRuntimeBtn" class="secondary">Refresh Runtime</button>
             <button id="createSessionBtn">Create Session</button>
             <button id="openEventsBtn" class="secondary">Open Events</button>
             <button id="resetSessionBtn" class="ghost">Reset Session</button>
+          </div>
+
+          <div class="status-pills row">
+            <div class="pill"><span>Backend STT</span><strong id="runtimeSttProvider">unknown</strong></div>
+            <div class="pill"><span>Backend LLM</span><strong id="runtimeLlmProvider">unknown</strong></div>
+            <div class="pill"><span>LLM Model</span><strong id="runtimeLlmModel">unknown</strong></div>
           </div>
 
           <div class="status-pills row">
@@ -381,39 +384,40 @@
 
       <section class="grid bottom">
         <article class="card">
-          <h2>STT Direct</h2>
+          <h2>STT Only</h2>
           <p class="sub">
-            Browser microphone goes straight to the sherpa websocket service.
-            This bypasses the backend so you can isolate STT transport and
-            recognition behavior.
+            This uses a dedicated backend session for microphone capture and
+            STT event observation. The panel only renders STT results, even
+            though the current backend may still continue into question
+            detection and answer generation for that dedicated session.
           </p>
 
           <div class="toolbar">
-            <button id="startSttDirectBtn">Start Mic</button>
-            <button id="stopSttDirectBtn" class="secondary">Stop Mic</button>
-            <button id="clearSttDirectBtn" class="ghost">Clear</button>
+            <button id="startSttOnlyBtn">Start STT Test</button>
+            <button id="stopSttOnlyBtn" class="secondary">Stop STT Test</button>
+            <button id="clearSttOnlyBtn" class="ghost">Clear</button>
           </div>
 
           <div class="panel">
-            <h3>Partial Transcript</h3>
-            <div id="sttDirectPartial" class="stream muted">Waiting for audio.</div>
+            <h3>STT Partial Transcript</h3>
+            <div id="sttOnlyPartial" class="stream muted">Waiting for backend transcript.</div>
           </div>
 
           <div class="panel">
-            <h3>Final Segments</h3>
-            <div id="sttDirectFinals" class="final-list muted">No final segments yet.</div>
+            <h3>STT Final Transcripts</h3>
+            <div id="sttOnlyFinals" class="final-list muted">No final transcripts yet.</div>
           </div>
 
           <div class="panel">
-            <h3>Direct STT Log</h3>
-            <div id="sttDirectLog" class="log"></div>
+            <h3>STT Log</h3>
+            <div id="sttOnlyLog" class="log"></div>
           </div>
         </article>
 
         <article class="card">
           <h2>LLM Only</h2>
           <p class="sub">
-            This drives the backend session and Groq integration without
+            This drives the backend session and its configured LLM without
             microphone input. It is useful for prompt, profile, and streaming
             answer validation in isolation.
           </p>
@@ -440,11 +444,12 @@
         </article>
 
         <article class="card">
-          <h2>Integrated</h2>
+          <h2>Audio Capture</h2>
           <p class="sub">
             Browser microphone sends PCM16 chunks to the backend. The backend
-            forwards audio to sherpa, performs question detection, and streams
-            the final answer back over SSE.
+            forwards audio to its configured STT provider, performs question
+            detection, and streams the final answer from its configured LLM
+            back over SSE.
           </p>
 
           <div class="toolbar">
@@ -482,9 +487,8 @@
 
       <p class="footer-note">
         Mic capture uses browser Web Audio APIs and assumes the backend expects
-        16 kHz mono PCM16. The direct STT mode converts the same captured audio
-        to float32 frames because your sherpa websocket server expects that wire
-        format.
+        16 kHz mono PCM16. The frontend only captures audio and submits it to
+        the backend over HTTP; it does not open a direct STT websocket.
       </p>
     </main>
 

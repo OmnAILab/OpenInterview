@@ -16,7 +16,24 @@ import (
 )
 
 type Config struct {
-	Addr string
+	Addr    string
+	Runtime RuntimeConfig
+}
+
+type RuntimeConfig struct {
+	STT RuntimeSTTConfig `json:"stt"`
+	LLM RuntimeLLMConfig `json:"llm"`
+}
+
+type RuntimeSTTConfig struct {
+	Provider                 string `json:"provider"`
+	DirectWebSocketAvailable bool   `json:"directWebSocketAvailable"`
+	DirectWebSocketURL       string `json:"directWebSocketUrl,omitempty"`
+}
+
+type RuntimeLLMConfig struct {
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
 }
 
 type Router struct {
@@ -75,6 +92,7 @@ func (r *Router) handleHealth(w http.ResponseWriter, _ *http.Request) {
 			"channels":   r.service.ExpectedChannels(),
 			"encoding":   r.service.ExpectedEncoding(),
 		},
+		"runtime": r.cfg.Runtime,
 	})
 }
 

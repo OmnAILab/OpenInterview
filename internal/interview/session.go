@@ -332,7 +332,7 @@ func (s *Session) handleTranscript(event stt.TranscriptEvent) {
 		})
 		s.log("stt", "final transcript received", map[string]any{"text": normalized})
 
-		if LooksLikeQuestion(normalized) {
+		if true {
 			s.mu.Lock()
 			s.currentQuestion = normalized
 			s.mu.Unlock()

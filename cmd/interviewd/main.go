@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,7 +24,15 @@ func main() {
 	cfg := config.Load()
 	sttFactory := stt.NewFactory(stt.Config{
 		Provider: cfg.STT.Provider,
-		WSURL:    cfg.STT.WSURL,
+		Sherpa: &stt.SherpaConfig{
+			WSURL: cfg.STT.Sherpa.WSURL,
+		},
+		Tencent: &stt.TencentConfig{
+			WSURL:     cfg.STT.Tencent.WSURL,
+			AppID:     cfg.STT.Tencent.AppID,
+			SecretID:  cfg.STT.Tencent.SecretID,
+			SecretKey: cfg.STT.Tencent.SecretKey,
+		},
 	}, logger)
 	llmClient := llm.NewClient(llm.Config{
 		Provider:     cfg.LLM.Provider,
@@ -43,9 +52,21 @@ func main() {
 		ExpectedRate:     cfg.Audio.SampleRate,
 		MaxChunkBytes:    cfg.Audio.MaxChunkBytes,
 	}, sttFactory, llmClient, logger)
+	directSTTWSURL := directSTTWebSocketURL(cfg.STT.Provider)
 
 	handler := httpapi.NewRouter(httpapi.Config{
 		Addr: cfg.Server.Addr,
+		Runtime: httpapi.RuntimeConfig{
+			STT: httpapi.RuntimeSTTConfig{
+				Provider:                 cfg.STT.Provider,
+				DirectWebSocketAvailable: directSTTWSURL != "",
+				DirectWebSocketURL:       directSTTWSURL,
+			},
+			LLM: httpapi.RuntimeLLMConfig{
+				Provider: cfg.LLM.Provider,
+				Model:    cfg.LLM.Model,
+			},
+		},
 	}, service, logger)
 
 	server := &http.Server{
@@ -72,5 +93,17 @@ func main() {
 
 	if err := server.Shutdown(ctx); err != nil {
 		logger.Printf("shutdown failed: %v", err)
+	}
+}
+
+func directSTTWebSocketURL(provider string) string {
+	cfg := config.Load()
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "sherpa", "sherpa-websocket", "sherpa_onnx", "sherpa-onnx":
+		return strings.TrimSpace(cfg.STT.Sherpa.WSURL)
+	case "tencent", "tencent-asr":
+		return strings.TrimSpace(cfg.STT.Tencent.WSURL)
+	default:
+		return ""
 	}
 }
