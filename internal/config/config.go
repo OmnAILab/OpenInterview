@@ -45,12 +45,13 @@ type SherpaConfig struct {
 }
 
 type TencentConfig struct {
-	WSURL      string
-	AppID      string
-	SecretID   string
-	SecretKey  string
-	EngineType string
-	NeedVAD    int
+	WSURL         string
+	AppID         string
+	SecretID      string
+	SecretKey     string
+	EngineType    string
+	NeedVAD       int
+	NoEmptyResult int
 }
 
 type LLMConfig struct {
@@ -89,12 +90,13 @@ func Load() Config {
 				WSURL: envString("INTERVIEW_SHERPA_WS_URL", ""),
 			},
 			Tencent: &TencentConfig{
-				WSURL:      envString("INTERVIEW_TENCENT_WS_URL", ""),
-				AppID:      envString("INTERVIEW_TENCENT_APP_ID", ""),
-				SecretID:   envString("INTERVIEW_TENCENT_SECRET_ID", ""),
-				SecretKey:  envString("INTERVIEW_TENCENT_SECRET_KEY", ""),
-				EngineType: envString("INTERVIEW_TENCENT_ENGINE_TYPE", "16k_zh"),
-				NeedVAD:    envInt("INTERVIEW_TENCENT_NEED_VAD", 0),
+				WSURL:         envString("INTERVIEW_TENCENT_WS_URL", ""),
+				AppID:         envString("INTERVIEW_TENCENT_APP_ID", ""),
+				SecretID:      envString("INTERVIEW_TENCENT_SECRET_ID", ""),
+				SecretKey:     envString("INTERVIEW_TENCENT_SECRET_KEY", ""),
+				EngineType:    envString("INTERVIEW_TENCENT_ENGINE_TYPE", "16k_zh"),
+				NeedVAD:       envInt("INTERVIEW_TENCENT_NEED_VAD", 0),
+				NoEmptyResult: envInt("INTERVIEW_TENCENT_NO_EMPTY_RESULT", 1),
 			},
 		},
 		LLM: LLMConfig{
@@ -134,9 +136,10 @@ func loadDotEnv(path string) {
 		if !ok {
 			continue
 		}
-		if _, exists := os.LookupEnv(key); exists {
-			continue
-		}
+		// ← 移除这个条件判断，总是设置 .env 中的值
+		// if _, exists := os.LookupEnv(key); exists {
+		// 	continue
+		// }
 		_ = os.Setenv(key, value)
 	}
 }

@@ -68,7 +68,7 @@ func NewRouter(cfg Config, service *interview.Service, logger *log.Logger) http.
 
 func (r *Router) withMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		start := time.Now()
+		//start := time.Now()
 
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
@@ -80,7 +80,7 @@ func (r *Router) withMiddleware(next http.Handler) http.Handler {
 		}
 
 		next.ServeHTTP(w, req)
-		r.logger.Printf("%s %s %s", req.Method, req.URL.Path, time.Since(start))
+		//r.logger.Printf("%s %s %s", req.Method, req.URL.Path, time.Since(start))
 	})
 }
 

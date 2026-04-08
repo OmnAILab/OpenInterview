@@ -19,12 +19,13 @@ type SherpaConfig struct {
 }
 
 type TencentConfig struct {
-	WSURL      string
-	AppID      string
-	SecretID   string
-	SecretKey  string
-	EngineType string
-	NeedVAD    int
+	WSURL         string
+	AppID         string
+	SecretID      string
+	SecretKey     string
+	EngineType    string
+	NeedVAD       int
+	NoEmptyResult int
 }
 
 type EventKind string

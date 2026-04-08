@@ -34,13 +34,14 @@ var tencentVoiceIDAlphabet = []byte("0123456789abcdefghijklmnopqrstuvwxyzABCDEFG
 
 // TencentAsrConfig holds Tencent ASR API credentials and parameters.
 type TencentAsrConfig struct {
-	WSURL      string
-	AppID      string
-	SecretID   string
-	SecretKey  string
-	EngineType string
-	NeedVAD    int
-	Logger     *log.Logger
+	WSURL         string
+	AppID         string
+	SecretID      string
+	SecretKey     string
+	EngineType    string
+	NeedVAD       int
+	NoEmptyResult int
+	Logger        *log.Logger
 }
 
 type tencentAsrFactory struct {
@@ -93,15 +94,13 @@ func (f *tencentAsrFactory) NewStream(sessionID string, sink Sink) (Stream, erro
 }
 
 type tencentAsrWebSocketStream struct {
-	sessionID string
-	voiceID   string
-	config    TencentAsrConfig
-	conn      *websocket.Conn
-	listener  *tencentTranscriptListener
-
-	writeMu sync.Mutex
-	stateMu sync.Mutex
-
+	sessionID   string
+	voiceID     string
+	config      TencentAsrConfig
+	conn        *websocket.Conn
+	listener    *tencentTranscriptListener
+	writeMu     sync.Mutex
+	stateMu     sync.Mutex
 	started     bool
 	expectClose bool
 	closed      bool
@@ -116,21 +115,20 @@ func (s *tencentAsrWebSocketStream) Push(ctx context.Context, chunk AudioChunk) 
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 
-	if s.isClosed() {
+	s.stateMu.Lock()
+	if s.closed {
+		s.stateMu.Unlock()
 		return fmt.Errorf("tencent asr stream closed")
 	}
+	s.stateMu.Unlock()
 
-	if deadline, ok := ctx.Deadline(); ok {
-		_ = s.conn.SetWriteDeadline(deadline)
-	} else {
-		_ = s.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	deadline := time.Now().Add(5 * time.Second)
+	if ctxDeadline, ok := ctx.Deadline(); ok {
+		deadline = ctxDeadline
 	}
+	_ = s.conn.SetWriteDeadline(deadline)
 
-	if err := s.conn.WriteMessage(websocket.BinaryMessage, chunk.Data); err != nil {
-		return fmt.Errorf("write audio to tencent asr websocket: %w", err)
-	}
-
-	return nil
+	return s.conn.WriteMessage(websocket.BinaryMessage, chunk.Data)
 }
 
 func (s *tencentAsrWebSocketStream) Close() error {
@@ -161,6 +159,23 @@ func (s *tencentAsrWebSocketStream) Close() error {
 	return nil
 }
 
+func (s *tencentAsrWebSocketStream) emitFinalIfNeeded(endpoint bool) {
+	s.stateMu.Lock()
+	text := strings.TrimSpace(s.listener.activeText)
+	s.listener.activeText = ""
+	s.stateMu.Unlock()
+
+	if text == "" {
+		return
+	}
+
+	s.listener.sink.HandleTranscriptEvent(context.Background(), TranscriptEvent{
+		Kind:     EventFinal,
+		Text:     text,
+		Endpoint: endpoint,
+	})
+}
+
 func (s *tencentAsrWebSocketStream) readLoop() {
 	defer close(s.connDone)
 	defer func() { _ = s.conn.Close() }()
@@ -168,10 +183,16 @@ func (s *tencentAsrWebSocketStream) readLoop() {
 	for {
 		msgType, payload, err := s.conn.ReadMessage()
 		if err != nil {
-			if !s.isExpectedClose() && !isNormalWebSocketClose(err) {
+			//s.listener.OnRecognitionComplete(nil)
+
+			s.emitFinalIfNeeded(true)
+
+			s.stateMu.Lock()
+			unexpectedClose := !s.expectClose
+			s.stateMu.Unlock()
+			if unexpectedClose && !isNormalWebSocketClose(err) {
 				s.listener.OnFail(nil, fmt.Errorf("read tencent asr websocket: %w", err))
 			}
-			s.listener.OnRecognitionComplete(nil)
 			return
 		}
 
@@ -185,25 +206,61 @@ func (s *tencentAsrWebSocketStream) readLoop() {
 			continue
 		}
 
-		s.dispatchResponse(&response)
-		if response.Final == 1 {
-			s.listener.OnRecognitionComplete(&response)
-			return
+		if s.config.Logger != nil {
+
+			if response.Result != nil {
+
+				s.config.Logger.Printf(
+					"[tencent-asr] session=%s code=%d message=%s voice_id=%s message_id=%s final=%d slice_type=%d index=%d start=%d end=%d text=%s word_size=%d word_list=%v",
+					s.sessionID,
+					response.Code,
+					response.Message,
+					response.VoiceID,
+					response.MessageID,
+					response.Final,
+					response.Result.SliceType,
+					response.Result.Index,
+					response.Result.StartTime,
+					response.Result.EndTime,
+					response.Result.VoiceTextStr,
+					response.Result.WordSize,
+					response.Result.WordList,
+				)
+
+			} else {
+
+				s.config.Logger.Printf(
+					"[tencent-asr] session=%s code=%d message=%s voice_id=%s message_id=%s final=%d result=nil",
+					s.sessionID,
+					response.Code,
+					response.Message,
+					response.VoiceID,
+					response.MessageID,
+					response.Final,
+				)
+			}
 		}
+
+		s.dispatchResponse(&response)
+
 	}
 }
 
 func (s *tencentAsrWebSocketStream) dispatchResponse(response *TencentAsrResponse) {
-	if response == nil {
-		return
-	}
-	if response.Code != 0 {
-		s.listener.OnFail(response, fmt.Errorf("tencent asr error: code=%d message=%s", response.Code, response.Message))
+	if response == nil || response.Code != 0 {
+		if response != nil {
+			s.listener.OnFail(response, fmt.Errorf("tencent asr error: code=%d message=%s", response.Code, response.Message))
+		}
 		return
 	}
 
-	if s.markStarted() {
+	s.stateMu.Lock()
+	if !s.started {
+		s.started = true
+		s.stateMu.Unlock()
 		s.listener.OnRecognitionStart(response)
+	} else {
+		s.stateMu.Unlock()
 	}
 
 	if response.Result != nil {
@@ -222,27 +279,11 @@ func (s *tencentAsrWebSocketStream) dispatchResponse(response *TencentAsrRespons
 	}
 }
 
-func (s *tencentAsrWebSocketStream) markStarted() bool {
-	s.stateMu.Lock()
-	defer s.stateMu.Unlock()
-	if s.started {
-		return false
-	}
-	s.started = true
-	return true
-}
-
-func (s *tencentAsrWebSocketStream) isExpectedClose() bool {
-	s.stateMu.Lock()
-	defer s.stateMu.Unlock()
-	return s.expectClose
-}
-
-func (s *tencentAsrWebSocketStream) isClosed() bool {
-	s.stateMu.Lock()
-	defer s.stateMu.Unlock()
-	return s.closed
-}
+// func (s *tencentAsrWebSocketStream) isClosed() bool {
+// 	s.stateMu.Lock()
+// 	defer s.stateMu.Unlock()
+// 	return s.closed
+// }
 
 type tencentTranscriptListener struct {
 	sessionID string
@@ -251,23 +292,20 @@ type tencentTranscriptListener struct {
 
 	mu sync.Mutex
 
-	activeIndex      int
-	activeText       string
-	lastPartialIndex int
-	lastPartialText  string
-	lastFinalIndex   int
-	lastFinalText    string
-	completed        bool
+	activeIndex    int
+	activeText     string
+	lastFinalIndex int
+	lastFinalText  string
+	completed      bool
 }
 
 func newTencentTranscriptListener(sessionID string, sink Sink, logger *log.Logger) *tencentTranscriptListener {
 	return &tencentTranscriptListener{
-		sessionID:        sessionID,
-		sink:             sink,
-		logger:           logger,
-		activeIndex:      -1,
-		lastPartialIndex: -1,
-		lastFinalIndex:   -1,
+		sessionID:      sessionID,
+		sink:           sink,
+		logger:         logger,
+		activeIndex:    -1,
+		lastFinalIndex: -1,
 	}
 }
 
@@ -276,13 +314,16 @@ func (l *tencentTranscriptListener) OnRecognitionStart(_ *TencentAsrResponse) {}
 func (l *tencentTranscriptListener) OnSentenceBegin(response *TencentAsrResponse) {
 	result, ok := trimmedTencentResult(response)
 	if !ok {
-		l.resetActiveSentence()
 		return
 	}
-	l.updateActiveSentence(result.Index, result.VoiceTextStr)
-	if result.VoiceTextStr == "" {
-		return
-	}
+	l.mu.Lock()
+	l.activeIndex = result.Index
+	l.activeText = result.VoiceTextStr
+	l.mu.Unlock()
+
+	// if result.VoiceTextStr == "" {
+	// 	return
+	// }
 	l.emitPartial(result.Index, result.VoiceTextStr)
 }
 
@@ -291,10 +332,14 @@ func (l *tencentTranscriptListener) OnRecognitionResultChange(response *TencentA
 	if !ok {
 		return
 	}
-	l.updateActiveSentence(result.Index, result.VoiceTextStr)
-	if result.VoiceTextStr == "" {
-		return
-	}
+	l.mu.Lock()
+	l.activeIndex = result.Index
+	l.activeText = result.VoiceTextStr
+	l.mu.Unlock()
+
+	// if result.VoiceTextStr == "" {
+	// 	return
+	// }
 	l.emitPartial(result.Index, result.VoiceTextStr)
 }
 
@@ -311,8 +356,6 @@ func (l *tencentTranscriptListener) OnSentenceEnd(response *TencentAsrResponse) 
 	}
 	l.activeIndex = -1
 	l.activeText = ""
-	l.lastPartialIndex = -1
-	l.lastPartialText = ""
 	shouldEmit := text != "" && (result.Index != l.lastFinalIndex || text != l.lastFinalText)
 	if shouldEmit {
 		l.lastFinalIndex = result.Index
@@ -329,36 +372,42 @@ func (l *tencentTranscriptListener) OnSentenceEnd(response *TencentAsrResponse) 
 	}
 }
 
-func (l *tencentTranscriptListener) OnRecognitionComplete(_ *TencentAsrResponse) {
-	l.mu.Lock()
-	if l.completed {
-		l.mu.Unlock()
-		return
-	}
-	l.completed = true
+// func (l *tencentTranscriptListener) OnRecognitionComplete(_ *TencentAsrResponse) {
+// 	l.mu.Lock()
+// 	if l.completed {
+// 		l.mu.Unlock()
+// 		return
+// 	}
+// 	l.completed = true
 
-	index := l.activeIndex
-	text := strings.TrimSpace(l.activeText)
-	l.activeIndex = -1
-	l.activeText = ""
-	l.lastPartialIndex = -1
-	l.lastPartialText = ""
+// 	index := l.activeIndex
+// 	text := strings.TrimSpace(l.activeText)
+// 	l.activeIndex = -1
+// 	l.activeText = ""
 
-	shouldEmit := text != "" && (index != l.lastFinalIndex || text != l.lastFinalText)
-	if shouldEmit {
-		l.lastFinalIndex = index
-		l.lastFinalText = text
-	}
-	l.mu.Unlock()
+// 	shouldEmit := text != "" && (index != l.lastFinalIndex || text != l.lastFinalText)
+// 	if shouldEmit {
+// 		l.lastFinalIndex = index
+// 		l.lastFinalText = text
+// 	}
+// 	l.mu.Unlock()
 
-	if shouldEmit {
-		l.sink.HandleTranscriptEvent(context.Background(), TranscriptEvent{
-			Kind:     EventFinal,
-			Text:     text,
-			Endpoint: true,
-		})
-	}
-}
+// 	if shouldEmit {
+// 		l.sink.HandleTranscriptEvent(context.Background(), TranscriptEvent{
+// 			Kind:     EventFinal,
+// 			Text:     text,
+// 			Endpoint: true,
+// 		})
+// 		return
+// 	}
+
+// 	// Always emit endpoint signal to notify LLM of completion
+// 	l.sink.HandleTranscriptEvent(context.Background(), TranscriptEvent{
+// 		Kind:     EventFinal,
+// 		Text:     "",
+// 		Endpoint: true,
+// 	})
+// }
 
 func (l *tencentTranscriptListener) OnFail(_ *TencentAsrResponse, err error) {
 	if err == nil {
@@ -370,32 +419,7 @@ func (l *tencentTranscriptListener) OnFail(_ *TencentAsrResponse, err error) {
 	l.sink.HandleSTTError(context.Background(), err)
 }
 
-func (l *tencentTranscriptListener) updateActiveSentence(index int, text string) {
-	l.mu.Lock()
-	l.activeIndex = index
-	l.activeText = text
-	l.mu.Unlock()
-}
-
-func (l *tencentTranscriptListener) resetActiveSentence() {
-	l.mu.Lock()
-	l.activeIndex = -1
-	l.activeText = ""
-	l.lastPartialIndex = -1
-	l.lastPartialText = ""
-	l.mu.Unlock()
-}
-
 func (l *tencentTranscriptListener) emitPartial(index int, text string) {
-	l.mu.Lock()
-	if index == l.lastPartialIndex && text == l.lastPartialText {
-		l.mu.Unlock()
-		return
-	}
-	l.lastPartialIndex = index
-	l.lastPartialText = text
-	l.mu.Unlock()
-
 	l.sink.HandleTranscriptEvent(context.Background(), TranscriptEvent{
 		Kind: EventPartial,
 		Text: text,
@@ -425,16 +449,16 @@ func normalizeTencentAsrConfig(cfg TencentAsrConfig) TencentAsrConfig {
 }
 
 func validateTencentAsrConfig(cfg TencentAsrConfig) error {
-	switch {
-	case cfg.AppID == "":
+	if cfg.AppID == "" {
 		return fmt.Errorf("tencent asr app id is empty")
-	case cfg.SecretID == "":
-		return fmt.Errorf("tencent asr secret id is empty")
-	case cfg.SecretKey == "":
-		return fmt.Errorf("tencent asr secret key is empty")
-	default:
-		return nil
 	}
+	if cfg.SecretID == "" {
+		return fmt.Errorf("tencent asr secret id is empty")
+	}
+	if cfg.SecretKey == "" {
+		return fmt.Errorf("tencent asr secret key is empty")
+	}
+	return nil
 }
 
 func buildTencentSignedURL(cfg TencentAsrConfig, voiceID string, now time.Time) (string, error) {
@@ -447,11 +471,17 @@ func buildTencentSignedURL(cfg TencentAsrConfig, voiceID string, now time.Time) 
 	query.Set("engine_model_type", cfg.EngineType)
 	query.Set("expired", strconv.FormatInt(now.Add(24*time.Hour).Unix(), 10))
 	query.Set("needvad", strconv.Itoa(cfg.NeedVAD))
+	query.Set("filter_empty_result", strconv.Itoa(cfg.NoEmptyResult))
 	query.Set("nonce", strconv.FormatInt(now.UnixNano()%1e10, 10))
 	query.Set("secretid", cfg.SecretID)
 	query.Set("timestamp", strconv.FormatInt(now.Unix(), 10))
 	query.Set("voice_format", tencentVoiceFormatPCM)
 	query.Set("voice_id", voiceID)
+
+	if cfg.Logger != nil {
+		cfg.Logger.Printf("[tencent-asr] NeedVAD=%d, EngineType=%s, NoEmptyResult=%d",
+			cfg.NeedVAD, cfg.EngineType, cfg.NoEmptyResult)
+	}
 
 	unsignedQuery := query.Encode()
 	signatureSource := endpoint.Host + endpoint.Path + "?" + unsignedQuery
@@ -478,12 +508,9 @@ func resolveTencentEndpoint(rawURL string, appID string) (*url.URL, error) {
 		return nil, fmt.Errorf("invalid tencent asr websocket url %q", base)
 	}
 
-	cleanPath := strings.TrimRight(parsed.Path, "/")
-	switch {
-	case cleanPath == "":
+	path := strings.TrimRight(parsed.Path, "/")
+	if path == "" || path == "/asr/v2" {
 		parsed.Path = "/asr/v2/" + appID
-	case cleanPath == "/asr/v2":
-		parsed.Path = cleanPath + "/" + appID
 	}
 	parsed.RawQuery = ""
 	parsed.Fragment = ""

@@ -28,10 +28,13 @@ func main() {
 			WSURL: cfg.STT.Sherpa.WSURL,
 		},
 		Tencent: &stt.TencentConfig{
-			WSURL:     cfg.STT.Tencent.WSURL,
-			AppID:     cfg.STT.Tencent.AppID,
-			SecretID:  cfg.STT.Tencent.SecretID,
-			SecretKey: cfg.STT.Tencent.SecretKey,
+			WSURL:         cfg.STT.Tencent.WSURL,
+			AppID:         cfg.STT.Tencent.AppID,
+			SecretID:      cfg.STT.Tencent.SecretID,
+			SecretKey:     cfg.STT.Tencent.SecretKey,
+			EngineType:    cfg.STT.Tencent.EngineType,
+			NeedVAD:       cfg.STT.Tencent.NeedVAD,
+			NoEmptyResult: cfg.STT.Tencent.NoEmptyResult,
 		},
 	}, logger)
 	llmClient := llm.NewClient(llm.Config{
