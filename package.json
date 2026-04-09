@@ -3,6 +3,7 @@
   "version": "0.2.0",
   "description": "A sample package.json",
   "scripts": {
+    "frontend": "node frontend/server.mjs",
     "test-frontend": "node test-frontend/server.mjs"
   },
   "dependencies": {

@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenInterview</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar-top">
+          <div class="brand-block">
+            <div class="brand-mark">OI</div>
+            <div class="brand-copy">
+              <div class="eyebrow">OpenInterview</div>
+              <h1>Sessions</h1>
+            </div>
+          </div>
+
+          <label class="field">
+            <span>Backend</span>
+            <input id="backendBaseUrl" value="http://localhost:8080" />
+          </label>
+
+          <button id="createSessionBtn" class="primary">New Session</button>
+        </div>
+
+        <div class="sidebar-body">
+          <div id="sessionList" class="session-list"></div>
+        </div>
+
+        <div class="sidebar-bottom">
+          <div class="status-card">
+            <div class="status-row">
+              <span>Listening</span>
+              <strong id="listeningState">false</strong>
+            </div>
+            <div class="status-row">
+              <span>Answering</span>
+              <strong id="answeringState">false</strong>
+            </div>
+            <div class="status-row">
+              <span>STT</span>
+              <strong id="runtimeSttProvider">unknown</strong>
+            </div>
+            <div class="status-row">
+              <span>LLM</span>
+              <strong id="runtimeLlmModel">unknown</strong>
+            </div>
+          </div>
+
+          <div class="sidebar-actions">
+            <button id="startListeningBtn" class="primary">Start Listen</button>
+            <button id="stopListeningBtn" class="secondary">Stop</button>
+            <button id="resetSessionBtn" class="ghost">Reset</button>
+          </div>
+
+          <button id="openSettingsBtn" class="secondary">Settings</button>
+        </div>
+      </aside>
+
+      <main class="main-stage">
+        <header class="stage-topbar">
+          <div class="stage-copy">
+            <div class="eyebrow">Interview Copilot</div>
+            <h2 id="activeSessionTitle">No Active Session</h2>
+            <p id="dockHint" class="stage-hint">Create a session to begin.</p>
+          </div>
+
+          <div class="header-side">
+            <div class="header-meta">
+              <div class="meta-chip">
+                <span>Session</span>
+                <strong id="activeSessionId">none</strong>
+              </div>
+              <div class="meta-chip">
+                <span>Audio</span>
+                <strong id="audioStats">0 chunks</strong>
+              </div>
+            </div>
+            <button id="deleteSessionBtn" class="ghost">Delete Session</button>
+          </div>
+        </header>
+
+        <section class="workspace">
+          <section class="workspace-column chat-shell">
+            <div class="section-label">
+              <div class="eyebrow">LLM</div>
+              <h3>Interview Response</h3>
+            </div>
+            <section class="chat-panel panel">
+              <section id="conversation" class="conversation"></section>
+            </section>
+          </section>
+
+          <aside class="workspace-column transcript-shell">
+            <div class="section-label">
+              <div class="eyebrow">Textdeal</div>
+              <h3>Stable Transcript</h3>
+            </div>
+
+            <section class="transcript-panel panel">
+              <div class="transcript-summary">
+                <div class="summary-item">
+                  <span>Partial</span>
+                  <div id="partialTranscript" class="summary-text muted">Waiting for transcript.</div>
+                </div>
+                <div class="summary-item">
+                  <span>Pending</span>
+                  <div id="pendingSegment" class="summary-text muted">No unsent stable text.</div>
+                </div>
+              </div>
+
+              <label class="editor-wrap">
+                <span>Click to place the next stop marker</span>
+                <textarea id="transcriptEditor" readonly placeholder="Stable transcript will appear here."></textarea>
+              </label>
+
+              <div class="transcript-actions">
+                <button id="sendCursorSegmentBtn" class="secondary">Send To Cursor</button>
+                <button id="sendTailSegmentBtn" class="ghost">Send Pending Tail</button>
+              </div>
+            </section>
+          </aside>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+
+    <div id="settingsModal" class="settings-modal" hidden>
+      <div id="settingsBackdrop" class="settings-backdrop"></div>
+      <section class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <header class="settings-header">
+          <div>
+            <div class="eyebrow">Capture Settings</div>
+            <h3 id="settingsTitle">Audio Source</h3>
+          </div>
+          <button id="closeSettingsBtn" class="ghost">Close</button>
+        </header>
+
+        <div class="settings-body">
+          <section class="settings-section">
+            <div class="section-label">
+              <div class="eyebrow">Source</div>
+              <h3>Choose What To Capture</h3>
+            </div>
+
+            <label class="source-option">
+              <input type="radio" name="captureSource" value="microphone" id="captureSourceMicrophone" />
+              <div>
+                <strong>Microphone</strong>
+                <p>Capture a selected audio input device.</p>
+              </div>
+            </label>
+
+            <label class="source-option">
+              <input type="radio" name="captureSource" value="speaker" id="captureSourceSpeaker" />
+              <div>
+                <strong>Speaker / System Audio</strong>
+                <p>Capture shared tab, window, or screen audio through the browser share dialog.</p>
+              </div>
+            </label>
+          </section>
+
+          <section id="microphoneSettingsSection" class="settings-section">
+            <div class="section-label">
+              <div class="eyebrow">Microphone</div>
+              <h3>Input Device</h3>
+            </div>
+
+            <label class="field">
+              <span>Device</span>
+              <select id="audioInputSelect"></select>
+            </label>
+
+            <button id="refreshAudioDevicesBtn" class="secondary">Refresh Devices</button>
+          </section>
+
+          <section class="settings-section">
+            <div class="section-label">
+              <div class="eyebrow">Notes</div>
+              <h3>Browser Behavior</h3>
+            </div>
+            <p id="audioDeviceHint" class="settings-note">
+              Changes apply the next time listening starts.
+            </p>
+          </section>
+        </div>
+
+        <footer class="settings-footer">
+          <button id="saveSettingsBtn" class="primary">Save Settings</button>
+        </footer>
+      </section>
+    </div>
+  </body>
+</html>

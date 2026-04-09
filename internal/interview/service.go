@@ -54,6 +54,20 @@ func (s *Service) CreateSession() Snapshot {
 	return session.Snapshot()
 }
 
+func (s *Service) DeleteSession(sessionID string) error {
+	s.mu.Lock()
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		s.mu.Unlock()
+		return ErrNotFound
+	}
+	delete(s.sessions, sessionID)
+	s.mu.Unlock()
+
+	session.Close()
+	return nil
+}
+
 func (s *Service) GetSnapshot(sessionID string) (Snapshot, error) {
 	session, err := s.session(sessionID)
 	if err != nil {
@@ -126,6 +140,14 @@ func (s *Service) AskQuestion(sessionID string, question string) (Snapshot, erro
 		return Snapshot{}, err
 	}
 	return session.AskQuestion(question)
+}
+
+func (s *Service) SubmitTextSegment(sessionID string, stop int) (Snapshot, error) {
+	session, err := s.session(sessionID)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	return session.SubmitTextSegment(stop)
 }
 
 func (s *Service) Reset(ctx context.Context, sessionID string) (Snapshot, error) {

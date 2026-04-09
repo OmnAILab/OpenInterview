@@ -206,40 +206,40 @@ func (s *tencentAsrWebSocketStream) readLoop() {
 			continue
 		}
 
-		if s.config.Logger != nil {
+		// if s.config.Logger != nil {
 
-			if response.Result != nil {
+		// 	if response.Result != nil {
 
-				s.config.Logger.Printf(
-					"[tencent-asr] session=%s code=%d message=%s voice_id=%s message_id=%s final=%d slice_type=%d index=%d start=%d end=%d text=%s word_size=%d word_list=%v",
-					s.sessionID,
-					response.Code,
-					response.Message,
-					response.VoiceID,
-					response.MessageID,
-					response.Final,
-					response.Result.SliceType,
-					response.Result.Index,
-					response.Result.StartTime,
-					response.Result.EndTime,
-					response.Result.VoiceTextStr,
-					response.Result.WordSize,
-					response.Result.WordList,
-				)
+		// 		s.config.Logger.Printf(
+		// 			"[tencent-asr] session=%s code=%d message=%s voice_id=%s message_id=%s final=%d slice_type=%d index=%d start=%d end=%d text=%s word_size=%d word_list=%v",
+		// 			s.sessionID,
+		// 			response.Code,
+		// 			response.Message,
+		// 			response.VoiceID,
+		// 			response.MessageID,
+		// 			response.Final,
+		// 			response.Result.SliceType,
+		// 			response.Result.Index,
+		// 			response.Result.StartTime,
+		// 			response.Result.EndTime,
+		// 			response.Result.VoiceTextStr,
+		// 			response.Result.WordSize,
+		// 			response.Result.WordList,
+		// 		)
 
-			} else {
+		// 	} else {
 
-				s.config.Logger.Printf(
-					"[tencent-asr] session=%s code=%d message=%s voice_id=%s message_id=%s final=%d result=nil",
-					s.sessionID,
-					response.Code,
-					response.Message,
-					response.VoiceID,
-					response.MessageID,
-					response.Final,
-				)
-			}
-		}
+		// 		s.config.Logger.Printf(
+		// 			"[tencent-asr] session=%s code=%d message=%s voice_id=%s message_id=%s final=%d result=nil",
+		// 			s.sessionID,
+		// 			response.Code,
+		// 			response.Message,
+		// 			response.VoiceID,
+		// 			response.MessageID,
+		// 			response.Final,
+		// 		)
+		// 	}
+		// }
 
 		s.dispatchResponse(&response)
 
@@ -478,10 +478,10 @@ func buildTencentSignedURL(cfg TencentAsrConfig, voiceID string, now time.Time) 
 	query.Set("voice_format", tencentVoiceFormatPCM)
 	query.Set("voice_id", voiceID)
 
-	if cfg.Logger != nil {
-		cfg.Logger.Printf("[tencent-asr] NeedVAD=%d, EngineType=%s, NoEmptyResult=%d",
-			cfg.NeedVAD, cfg.EngineType, cfg.NoEmptyResult)
-	}
+	// if cfg.Logger != nil {
+	// 	cfg.Logger.Printf("[tencent-asr] NeedVAD=%d, EngineType=%s, NoEmptyResult=%d",
+	// 		cfg.NeedVAD, cfg.EngineType, cfg.NoEmptyResult)
+	// }
 
 	unsignedQuery := query.Encode()
 	signatureSource := endpoint.Host + endpoint.Path + "?" + unsignedQuery

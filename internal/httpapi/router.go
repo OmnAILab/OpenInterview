@@ -52,6 +52,7 @@ func NewRouter(cfg Config, service *interview.Service, logger *log.Logger) http.
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/healthz", router.handleHealth)
 	mux.HandleFunc("POST /api/sessions", router.handleCreateSession)
+	mux.HandleFunc("DELETE /api/sessions/{sessionID}", router.handleDeleteSession)
 	mux.HandleFunc("GET /api/sessions/{sessionID}", router.handleGetSession)
 	mux.HandleFunc("GET /api/sessions/{sessionID}/events", router.handleEvents)
 	mux.HandleFunc("GET /api/sessions/{sessionID}/profile", router.handleGetProfile)
@@ -62,6 +63,7 @@ func NewRouter(cfg Config, service *interview.Service, logger *log.Logger) http.
 	mux.HandleFunc("POST /api/sessions/{sessionID}/reset", router.handleReset)
 	mux.HandleFunc("POST /api/sessions/{sessionID}/debug/transcript", router.handleDebugTranscript)
 	mux.HandleFunc("POST /api/sessions/{sessionID}/ask", router.handleAskQuestion)
+	mux.HandleFunc("POST /api/sessions/{sessionID}/textdeal/segment", router.handleSubmitTextSegment)
 
 	return router.withMiddleware(mux)
 }
@@ -72,7 +74,7 @@ func (r *Router) withMiddleware(next http.Handler) http.Handler {
 
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 
 		if req.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -99,6 +101,14 @@ func (r *Router) handleHealth(w http.ResponseWriter, _ *http.Request) {
 func (r *Router) handleCreateSession(w http.ResponseWriter, _ *http.Request) {
 	snapshot := r.service.CreateSession()
 	writeJSON(w, http.StatusCreated, snapshot)
+}
+
+func (r *Router) handleDeleteSession(w http.ResponseWriter, req *http.Request) {
+	if err := r.service.DeleteSession(req.PathValue("sessionID")); err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (r *Router) handleGetSession(w http.ResponseWriter, req *http.Request) {
@@ -264,6 +274,23 @@ func (r *Router) handleAskQuestion(w http.ResponseWriter, req *http.Request) {
 	}
 
 	snapshot, err := r.service.AskQuestion(req.PathValue("sessionID"), body.Question)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, snapshot)
+}
+
+func (r *Router) handleSubmitTextSegment(w http.ResponseWriter, req *http.Request) {
+	var body struct {
+		Stop int `json:"stop"`
+	}
+	if err := decodeJSON(req, &body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+
+	snapshot, err := r.service.SubmitTextSegment(req.PathValue("sessionID"), body.Stop)
 	if err != nil {
 		writeServiceError(w, err)
 		return

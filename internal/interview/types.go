@@ -1,6 +1,10 @@
 package interview
 
-import "time"
+import (
+	"time"
+
+	"openinterview/internal/textdeal"
+)
 
 type CandidateProfile struct {
 	TargetRole     string   `json:"targetRole"`
@@ -23,17 +27,18 @@ type AudioStats struct {
 }
 
 type Snapshot struct {
-	ID                string           `json:"id"`
-	Listening         bool             `json:"listening"`
-	AnswerInProgress  bool             `json:"answerInProgress"`
-	PartialTranscript string           `json:"partialTranscript"`
-	FinalTranscripts  []string         `json:"finalTranscripts"`
-	CurrentQuestion   string           `json:"currentQuestion"`
-	CurrentAnswer     string           `json:"currentAnswer"`
-	Profile           CandidateProfile `json:"profile"`
-	History           []Turn           `json:"history"`
-	Audio             AudioStats       `json:"audio"`
-	LastError         string           `json:"lastError,omitempty"`
+	ID                string            `json:"id"`
+	Listening         bool              `json:"listening"`
+	AnswerInProgress  bool              `json:"answerInProgress"`
+	PartialTranscript string            `json:"partialTranscript"`
+	FinalTranscripts  []string          `json:"finalTranscripts"`
+	TextDeal          textdeal.Snapshot `json:"textDeal"`
+	CurrentQuestion   string            `json:"currentQuestion"`
+	CurrentAnswer     string            `json:"currentAnswer"`
+	Profile           CandidateProfile  `json:"profile"`
+	History           []Turn            `json:"history"`
+	Audio             AudioStats        `json:"audio"`
+	LastError         string            `json:"lastError,omitempty"`
 }
 
 type Event struct {

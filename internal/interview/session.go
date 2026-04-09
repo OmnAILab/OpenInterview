@@ -11,6 +11,7 @@ import (
 
 	"openinterview/internal/llm"
 	"openinterview/internal/stt"
+	"openinterview/internal/textdeal"
 )
 
 type Session struct {
@@ -26,6 +27,7 @@ type Session struct {
 	answerInProgress  bool
 	partialTranscript string
 	finalTranscripts  []string
+	textDeal          textdeal.Buffer
 	currentQuestion   string
 	currentAnswer     string
 	profile           CandidateProfile
@@ -213,6 +215,35 @@ func (s *Session) AskQuestion(question string) (Snapshot, error) {
 	return s.Snapshot(), nil
 }
 
+func (s *Session) SubmitTextSegment(stop int) (Snapshot, error) {
+	s.mu.Lock()
+	segment, textDealSnapshot, err := s.textDeal.SubmitStop(stop)
+	if err != nil {
+		s.mu.Unlock()
+		return Snapshot{}, fmt.Errorf("%w: %v", ErrBadRequest, err)
+	}
+
+	s.currentQuestion = segment.Text
+	s.lastError = ""
+	s.mu.Unlock()
+
+	s.publish("textdeal.updated", textDealSnapshot)
+	s.publish("question.detected", map[string]any{
+		"text":   segment.Text,
+		"source": "textdeal",
+		"start":  segment.Start,
+		"end":    segment.End,
+	})
+	s.log("textdeal", "segment submitted to llm", map[string]any{
+		"text":  segment.Text,
+		"start": segment.Start,
+		"end":   segment.End,
+	})
+
+	s.startAnswer(segment.Text)
+	return s.Snapshot(), nil
+}
+
 func (s *Session) Reset(ctx context.Context) (Snapshot, error) {
 	s.mu.Lock()
 	cancel := s.answerCancel
@@ -223,6 +254,7 @@ func (s *Session) Reset(ctx context.Context) (Snapshot, error) {
 	s.answerInProgress = false
 	s.partialTranscript = ""
 	s.finalTranscripts = nil
+	s.textDeal.Reset()
 	s.currentQuestion = ""
 	s.currentAnswer = ""
 	s.history = nil
@@ -253,6 +285,26 @@ func (s *Session) Reset(ctx context.Context) (Snapshot, error) {
 	s.publish("session.reset", map[string]any{"sessionId": s.id})
 	s.log("session", "session context reset", nil)
 	return snapshot, nil
+}
+
+func (s *Session) Close() {
+	s.mu.Lock()
+	cancel := s.answerCancel
+	s.answerCancel = nil
+	s.activeAnswerID++
+	s.answerInProgress = false
+	s.listening = false
+	stream := s.detachStreamLocked()
+	s.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	if stream != nil {
+		_ = stream.Close()
+	}
+
+	s.broker.close()
 }
 
 func (s *Session) HandleTranscriptEvent(ctx context.Context, event stt.TranscriptEvent) {
@@ -320,9 +372,12 @@ func (s *Session) handleTranscript(event stt.TranscriptEvent) {
 		s.mu.Unlock()
 		s.publish("stt.partial", map[string]any{"text": normalized})
 	case stt.EventFinal:
+		var textDealSnapshot textdeal.Snapshot
+
 		s.mu.Lock()
 		s.partialTranscript = ""
 		s.finalTranscripts = appendAndTrim(s.finalTranscripts, normalized, 20)
+		textDealSnapshot = s.textDeal.AppendStable(normalized)
 		s.lastError = ""
 		s.mu.Unlock()
 
@@ -330,20 +385,11 @@ func (s *Session) handleTranscript(event stt.TranscriptEvent) {
 			"text":     normalized,
 			"endpoint": event.Endpoint,
 		})
+		s.publish("textdeal.updated", textDealSnapshot)
 		s.log("stt", "final transcript received", map[string]any{"text": normalized})
-
-		if true {
-			s.mu.Lock()
-			s.currentQuestion = normalized
-			s.mu.Unlock()
-			s.publish("question.detected", map[string]any{"text": normalized})
-			s.log("question", "question detected", map[string]any{"text": normalized})
-			s.startAnswer(normalized)
-			return
-		}
-
-		s.log("question", "final transcript ignored because it does not look like a question", map[string]any{
-			"text": normalized,
+		s.log("textdeal", "stable transcript appended", map[string]any{
+			"text":             normalized,
+			"stableTextLength": len([]rune(textDealSnapshot.StableText)),
 		})
 	default:
 		s.log("stt", "unsupported transcript event kind", map[string]any{"kind": event.Kind})
@@ -541,6 +587,7 @@ func (s *Session) snapshotLocked() Snapshot {
 		AnswerInProgress:  s.answerInProgress,
 		PartialTranscript: s.partialTranscript,
 		FinalTranscripts:  finals,
+		TextDeal:          s.textDeal.Snapshot(),
 		CurrentQuestion:   s.currentQuestion,
 		CurrentAnswer:     s.currentAnswer,
 		Profile:           s.profile,

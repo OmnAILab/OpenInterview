@@ -38,6 +38,10 @@ const elements = {
   clearIntegratedBtn: document.getElementById("clearIntegratedBtn"),
   integratedPartial: document.getElementById("integratedPartial"),
   integratedFinals: document.getElementById("integratedFinals"),
+  textDealTranscript: document.getElementById("textDealTranscript"),
+  sendTextDealSegmentBtn: document.getElementById("sendTextDealSegmentBtn"),
+  textDealCursorEndBtn: document.getElementById("textDealCursorEndBtn"),
+  textDealPending: document.getElementById("textDealPending"),
   integratedQuestion: document.getElementById("integratedQuestion"),
   integratedAnswer: document.getElementById("integratedAnswer"),
   integratedLog: document.getElementById("integratedLog"),
@@ -47,6 +51,7 @@ const backendEventTypes = [
   "state",
   "stt.partial",
   "stt.final",
+  "textdeal.updated",
   "question.detected",
   "question.manual",
   "llm.started",
@@ -75,6 +80,8 @@ const state = {
   integrated: {
     finals: [],
     sendChain: Promise.resolve(),
+    textDeal: emptyTextDealState(),
+    textCursorRaw: 0,
   },
 };
 
@@ -108,6 +115,11 @@ function bindActions() {
   elements.startIntegratedBtn.addEventListener("click", () => runAction(startIntegrated));
   elements.stopIntegratedBtn.addEventListener("click", () => runAction(stopIntegrated));
   elements.clearIntegratedBtn.addEventListener("click", clearIntegratedPanel);
+  elements.sendTextDealSegmentBtn.addEventListener("click", () => runAction(submitTextDealSegment));
+  elements.textDealCursorEndBtn.addEventListener("click", moveTextDealCursorToEnd);
+  elements.textDealTranscript.addEventListener("click", syncTextDealCursorFromSelection);
+  elements.textDealTranscript.addEventListener("keyup", syncTextDealCursorFromSelection);
+  elements.textDealTranscript.addEventListener("select", syncTextDealCursorFromSelection);
 }
 
 async function runAction(action) {
@@ -302,6 +314,20 @@ async function askManualQuestion() {
   appendLog(elements.llmOnlyLog, `Asked question: ${question}`);
 }
 
+async function submitTextDealSegment() {
+  ensureSessionId();
+
+  const rawCursor = getTextDealCursorRaw();
+  if (rawCursor <= state.integrated.textDeal.sentUntil) {
+    throw new Error("Move the stop marker forward before sending.");
+  }
+
+  await requestJSON("POST", `/api/sessions/${state.sessionId}/textdeal/segment`, {
+    stop: rawCursor,
+  });
+  appendLog(elements.integratedLog, `Submitted textdeal segment up to ${rawCursor}.`);
+}
+
 async function startSTTOnly() {
   ensureCaptureAvailable("stt-only");
   clearSTTOnlyPanel();
@@ -357,6 +383,24 @@ async function stopIntegrated() {
     await requestJSON("POST", `/api/sessions/${state.sessionId}/listen/stop`);
     appendLog(elements.integratedLog, "Backend listening stopped.");
   }
+}
+
+function moveTextDealCursorToEnd() {
+  const total = codePointLength(state.integrated.textDeal.stableText);
+  state.integrated.textCursorRaw = total;
+  renderTextDealEditor();
+}
+
+function syncTextDealCursorFromSelection() {
+  const display = elements.textDealTranscript.value || "";
+  const selectionStart = elements.textDealTranscript.selectionStart || 0;
+  const rawCursor = codePointLength(display.slice(0, selectionStart).replaceAll("|", ""));
+  state.integrated.textCursorRaw = clamp(rawCursor, state.integrated.textDeal.sentUntil, codePointLength(state.integrated.textDeal.stableText));
+}
+
+function getTextDealCursorRaw() {
+  syncTextDealCursorFromSelection();
+  return state.integrated.textCursorRaw;
 }
 
 function queueIntegratedChunk(payload) {
@@ -547,6 +591,10 @@ function handleBackendEvent(type, record) {
       }
       appendLog(elements.integratedLog, `Final: ${payload.text || ""}`);
       break;
+    case "textdeal.updated":
+      applyTextDealSnapshot(payload);
+      appendLog(elements.integratedLog, `Stable text updated. Pending length: ${codePointLength(payload.pendingText || "")}`);
+      break;
     case "question.detected":
     case "question.manual":
       setStreamText(elements.integratedQuestion, payload.text || "", "No question detected yet.");
@@ -623,6 +671,7 @@ function applySnapshot(snapshot) {
   setStreamText(elements.backendQuestion, snapshot.currentQuestion || "", "No question yet.");
   setStreamText(elements.backendAnswer, snapshot.currentAnswer || "", "No answer yet.");
   setStreamText(elements.integratedPartial, snapshot.partialTranscript || "", "Waiting for backend transcript.");
+  applyTextDealSnapshot(snapshot.textDeal || {});
   setStreamText(elements.integratedQuestion, snapshot.currentQuestion || "", "No question detected yet.");
   setStreamText(elements.integratedAnswer, snapshot.currentAnswer || "", "Waiting for backend answer stream.");
   setStreamText(elements.llmOnlyAnswer, snapshot.currentAnswer || "", "Waiting for a manual question.");
@@ -638,6 +687,21 @@ function applySTTOnlySnapshot(snapshot) {
 
   setStreamText(elements.sttOnlyPartial, snapshot.partialTranscript || "", "Waiting for backend transcript.");
   renderFinalList(elements.sttOnlyFinals, state.sttOnly.finals, "No final transcripts yet.");
+}
+
+function applyTextDealSnapshot(textDeal) {
+  const next = normalizeTextDealState(textDeal);
+  const shouldFollowTail = document.activeElement !== elements.textDealTranscript;
+
+  state.integrated.textDeal = next;
+  if (shouldFollowTail) {
+    state.integrated.textCursorRaw = codePointLength(next.stableText);
+  } else {
+    state.integrated.textCursorRaw = clamp(state.integrated.textCursorRaw, next.sentUntil, codePointLength(next.stableText));
+  }
+
+  renderTextDealEditor();
+  setStreamText(elements.textDealPending, next.pendingText || "", "No unsent stable text.");
 }
 
 function applyBackendRuntime(health) {
@@ -714,7 +778,11 @@ function clearSTTOnlyPanel() {
 
 function clearIntegratedPanel() {
   state.integrated.finals = [];
+  state.integrated.textDeal = emptyTextDealState();
+  state.integrated.textCursorRaw = 0;
   setStreamText(elements.integratedPartial, "", "Waiting for backend transcript.");
+  renderTextDealEditor();
+  setStreamText(elements.textDealPending, "", "No unsent stable text.");
   setStreamText(elements.integratedQuestion, "", "No question detected yet.");
   setStreamText(elements.integratedAnswer, "", "Waiting for backend answer stream.");
   renderFinalList(elements.integratedFinals, [], "No final transcripts yet.");
@@ -752,6 +820,15 @@ function emptyRuntimeState() {
       provider: "",
       model: "",
     },
+  };
+}
+
+function emptyTextDealState() {
+  return {
+    stableText: "",
+    sentUntil: 0,
+    markers: [],
+    pendingText: "",
   };
 }
 
@@ -808,6 +885,60 @@ function splitTechStack(raw) {
     .split(/[\n,]/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function normalizeTextDealState(textDeal) {
+  const stableText = typeof textDeal?.stableText === "string" ? textDeal.stableText : "";
+  const total = codePointLength(stableText);
+  const sentUntil = clamp(Number.isFinite(textDeal?.sentUntil) ? Number(textDeal.sentUntil) : 0, 0, total);
+  const markers = Array.isArray(textDeal?.markers)
+    ? [...new Set(textDeal.markers.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item > 0 && item <= total))].sort((left, right) => left - right)
+    : [];
+  const pendingText = typeof textDeal?.pendingText === "string" ? textDeal.pendingText : "";
+
+  return {
+    stableText,
+    sentUntil,
+    markers,
+    pendingText,
+  };
+}
+
+function renderTextDealEditor() {
+  const textDeal = state.integrated.textDeal;
+  const display = buildTextDealDisplay(textDeal);
+  const rawCursor = clamp(state.integrated.textCursorRaw, textDeal.sentUntil, codePointLength(textDeal.stableText));
+  const displayCursor = rawCursor + textDeal.markers.filter((marker) => marker <= rawCursor).length;
+  const displayOffset = toCodeUnitOffset(display, displayCursor);
+
+  elements.textDealTranscript.value = display;
+  elements.textDealTranscript.placeholder = "Waiting for stable transcript.";
+  elements.textDealTranscript.setSelectionRange(displayOffset, displayOffset);
+}
+
+function buildTextDealDisplay(textDeal) {
+  const chars = Array.from(textDeal.stableText || "");
+  let offset = 0;
+  for (const marker of textDeal.markers || []) {
+    const position = clamp(marker + offset, 0, chars.length);
+    chars.splice(position, 0, "|");
+    offset += 1;
+  }
+  return chars.join("");
+}
+
+function codePointLength(text) {
+  return Array.from(text || "").length;
+}
+
+function toCodeUnitOffset(text, codePointIndex) {
+  return Array.from(text || "")
+    .slice(0, codePointIndex)
+    .join("").length;
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
 }
 
 function resampleFloat32(input, inputRate, outputRate) {

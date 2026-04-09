@@ -150,6 +150,12 @@
         resize: vertical;
       }
 
+      textarea.transcript-editor {
+        min-height: 180px;
+        font: 0.95rem/1.7 "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+        white-space: pre-wrap;
+      }
+
       button {
         border: 0;
         border-radius: 999px;
@@ -447,9 +453,9 @@
           <h2>Audio Capture</h2>
           <p class="sub">
             Browser microphone sends PCM16 chunks to the backend. The backend
-            forwards audio to its configured STT provider, performs question
-            detection, and streams the final answer from its configured LLM
-            back over SSE.
+            forwards audio to its configured STT provider, accumulates stable
+            transcript text in the textdeal layer, and waits for a manual stop
+            marker before sending a segment to the configured LLM.
           </p>
 
           <div class="toolbar">
@@ -466,6 +472,31 @@
           <div class="panel">
             <h3>Integrated Final Transcripts</h3>
             <div id="integratedFinals" class="final-list muted">No final transcripts yet.</div>
+          </div>
+
+          <div class="panel">
+            <h3>Textdeal Stable Transcript</h3>
+            <p class="sub">
+              Click inside the text below to place the next stop marker, then
+              submit it. Text between the previous marker and the new marker
+              will be sent to the backend LLM.
+            </p>
+            <textarea
+              id="textDealTranscript"
+              class="transcript-editor"
+              readonly
+              placeholder="Waiting for stable transcript."
+            ></textarea>
+
+            <div class="toolbar">
+              <button id="sendTextDealSegmentBtn">Insert Stop And Send</button>
+              <button id="textDealCursorEndBtn" class="secondary">Move Cursor To End</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>Textdeal Pending Segment</h3>
+            <div id="textDealPending" class="stream muted">No unsent stable text.</div>
           </div>
 
           <div class="panel">

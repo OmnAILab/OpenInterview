@@ -74,3 +74,37 @@ func TestHandleHealthIncludesRuntime(t *testing.T) {
 		t.Fatalf("runtime.llm.model = %q, want llama-3.3-70b-versatile", got)
 	}
 }
+
+func TestDeleteSessionRemovesSession(t *testing.T) {
+	logger := log.New(io.Discard, "", 0)
+	service := interview.NewService(interview.Config{
+		MaxTurns:         5,
+		ExpectedRate:     16000,
+		ExpectedChannels: 1,
+		ExpectedEncoding: "pcm16",
+		MaxChunkBytes:    262144,
+	}, stt.NewFactory(stt.Config{Provider: "mock"}, logger), llm.NewClient(llm.Config{Provider: "mock"}, logger), logger)
+
+	handler := NewRouter(Config{
+		Addr:    ":8080",
+		Runtime: RuntimeConfig{},
+	}, service, logger)
+
+	created := service.CreateSession()
+
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/sessions/"+created.ID, nil)
+	deleteRec := httptest.NewRecorder()
+	handler.ServeHTTP(deleteRec, deleteReq)
+
+	if deleteRec.Code != http.StatusNoContent {
+		t.Fatalf("delete status = %d, want %d", deleteRec.Code, http.StatusNoContent)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/sessions/"+created.ID, nil)
+	getRec := httptest.NewRecorder()
+	handler.ServeHTTP(getRec, getReq)
+
+	if getRec.Code != http.StatusNotFound {
+		t.Fatalf("get after delete status = %d, want %d", getRec.Code, http.StatusNotFound)
+	}
+}
