@@ -71,8 +71,9 @@ cp .env.example .env
 # 服务监听地址
 INTERVIEW_ADDR=:8080
 
-# STT 服务地址
+# STT 配置
 INTERVIEW_STT_PROVIDER=sherpa-websocket
+INTERVIEW_STT_PORT=6006
 INTERVIEW_STT_WS_URL=ws://127.0.0.1:6006/
 
 # LLM 配置（以 Groq 为例）
@@ -80,6 +81,8 @@ INTERVIEW_LLM_PROVIDER=groq
 INTERVIEW_LLM_BASE_URL=https://api.groq.com/openai/v1
 INTERVIEW_LLM_API_KEY=你的_API_KEY
 INTERVIEW_LLM_MODEL=llama-3.3-70b-versatile
+INTERVIEW_LLM_ENDPOINT=/chat/completions
+INTERVIEW_LLM_TIMEOUT=90s
 ```
 
 > **注意**：`.env` 文件会被自动加载，但进程环境变量的优先级高于 `.env`。
