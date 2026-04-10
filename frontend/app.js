@@ -105,6 +105,7 @@ function bindActions() {
   elements.transcriptEditor.addEventListener("click", syncTranscriptCursorFromSelection);
   elements.transcriptEditor.addEventListener("keyup", syncTranscriptCursorFromSelection);
   elements.transcriptEditor.addEventListener("select", syncTranscriptCursorFromSelection);
+  document.addEventListener("keydown", handleGlobalKeydown);
   window.addEventListener("beforeunload", closeEvents);
 }
 
@@ -166,6 +167,12 @@ function closeSettingsModal() {
   renderAudioSettingsModal();
 }
 
+function handleGlobalKeydown(event) {
+  if (event.key === "Escape" && state.audio.settingsOpen) {
+    closeSettingsModal();
+  }
+}
+
 function handleCaptureSourceDraftChange() {
   state.audio.draftCaptureSource = elements.captureSourceSpeaker.checked ? "speaker" : "microphone";
   renderAudioSettingsModal();
@@ -179,7 +186,7 @@ async function saveAudioSettings() {
   state.audio.captureSource = state.audio.draftCaptureSource;
   state.audio.selectedDeviceId = state.audio.draftDeviceId;
   persistAudioSettings();
-  closeSettingsModal()
+  closeSettingsModal();
   renderDockHint(
     state.audio.captureSource === "speaker"
       ? "Settings saved. Start listening to share speaker/system audio."
@@ -268,7 +275,7 @@ function renderAudioSettingsModal(message) {
 
   const defaultMessage =
     state.audio.draftCaptureSource === "speaker"
-      ? "Speaker capture uses the browser share dialog. Choose a tab, window, or screen and enable audio sharing when prompted."
+      ? "Speaker capture uses the browser share dialog. Use Chrome or Edge, then choose a tab, window, or screen and enable audio sharing when prompted."
       : state.capture
         ? "Microphone changes apply the next time listening starts."
         : "Choose which microphone to use when listening starts.";
@@ -841,6 +848,14 @@ async function startAudioCapture(onSamples) {
       ? await requestSpeakerAudioStream()
       : await requestMicrophoneStream();
 
+  const audioTracks = stream.getAudioTracks();
+  if (audioTracks.length === 0) {
+    stream.getTracks().forEach((track) => track.stop());
+    throw new Error("No audio track is available from the selected source.");
+  }
+
+  const processingStream = new MediaStream([audioTracks[0]]);
+
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) {
     stream.getTracks().forEach((track) => track.stop());
@@ -850,16 +865,15 @@ async function startAudioCapture(onSamples) {
   const audioContext = new AudioContextClass();
   await audioContext.resume();
 
-  const source = audioContext.createMediaStreamSource(stream);
-  const processor = audioContext.createScriptProcessor(4096, 1, 1);
+  const source = audioContext.createMediaStreamSource(processingStream);
+  const inputChannels = Math.max(1, Math.min(2, source.channelCount || audioTracks[0].getSettings?.().channelCount || 2));
+  const processor = audioContext.createScriptProcessor(4096, inputChannels, 1);
   const mute = audioContext.createGain();
   mute.gain.value = 0;
 
   processor.onaudioprocess = (event) => {
-    const input = event.inputBuffer.getChannelData(0);
-    const copied = new Float32Array(input.length);
-    copied.set(input);
-    const resampled = resampleFloat32(copied, audioContext.sampleRate, 16000);
+    const mono = mixInputBufferToMono(event.inputBuffer);
+    const resampled = resampleFloat32(mono, audioContext.sampleRate, 16000);
     if (resampled.length > 0) {
       onSamples(resampled);
     }
@@ -901,17 +915,62 @@ async function requestSpeakerAudioStream() {
     throw new Error("This browser does not support speaker/system audio capture.");
   }
 
+  if (!isChromiumBrowser()) {
+    throw new Error("Speaker/system audio capture currently requires Chrome or Edge. Firefox and Safari usually do not expose a shareable system-audio track.");
+  }
+
   const stream = await navigator.mediaDevices.getDisplayMedia({
     video: true,
-    audio: true,
+    audio: {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      suppressLocalAudioPlayback: false,
+    },
   });
 
   if (stream.getAudioTracks().length === 0) {
     stream.getTracks().forEach((track) => track.stop());
-    throw new Error("No shared audio track was provided. Enable audio sharing in the browser dialog.");
+    throw new Error("No shared audio track was provided. In the browser share dialog, select a tab/window/screen that supports audio and enable audio sharing.");
   }
 
   return stream;
+}
+
+function mixInputBufferToMono(inputBuffer) {
+  const channelCount = inputBuffer.numberOfChannels || 1;
+  const sampleCount = inputBuffer.length;
+  const mixed = new Float32Array(sampleCount);
+
+  if (channelCount === 1) {
+    mixed.set(inputBuffer.getChannelData(0));
+    return mixed;
+  }
+
+  for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+    const channelData = inputBuffer.getChannelData(channelIndex);
+    for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += 1) {
+      mixed[sampleIndex] += channelData[sampleIndex];
+    }
+  }
+
+  const scale = 1 / channelCount;
+  for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += 1) {
+    mixed[sampleIndex] *= scale;
+  }
+
+  return mixed;
+}
+
+function isChromiumBrowser() {
+  if (Array.isArray(navigator.userAgentData?.brands)) {
+    return navigator.userAgentData.brands.some((brand) =>
+      /Chromium|Google Chrome|Microsoft Edge/i.test(brand.brand),
+    );
+  }
+
+  const userAgent = navigator.userAgent || "";
+  return /Chrome|Chromium|Edg\//.test(userAgent) && !/Firefox\//.test(userAgent);
 }
 
 async function stopCaptureIfNeeded() {
@@ -943,6 +1002,16 @@ function findSessionMeta(sessionId) {
 
 function persistSessions() {
   localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(state.sessions));
+}
+
+function persistAudioSettings() {
+  if (state.audio.selectedDeviceId) {
+    localStorage.setItem(AUDIO_INPUT_STORAGE_KEY, state.audio.selectedDeviceId);
+  } else {
+    localStorage.removeItem(AUDIO_INPUT_STORAGE_KEY);
+  }
+
+  localStorage.setItem(CAPTURE_SOURCE_STORAGE_KEY, state.audio.captureSource);
 }
 
 function loadStoredSessions() {
