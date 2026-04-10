@@ -1,6 +1,18 @@
 # OpenInterview
 
+> **AI-Powered Interview Copilot** · **AI 驱动的面试助手**
+
+[![License](https://img.shields.io/github/license/OmnAILab/OpenInterview)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/OmnAILab/OpenInterview?style=social)](https://github.com/OmnAILab/OpenInterview/stargazers)
+[![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)](https://go.dev/)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/OmnAILab/OpenInterview/pulls)
+
+Real-time AI interview assistant: transcribes the interviewer's speech, lets you decide when to send it to an LLM, and streams reference answers — so you stay calm and confident in any interview.  
+**Open source. Pay only for API usage (typically < $0.10 / interview).**
+
 > **AI 驱动的面试助手**：实时将面试官的语音转为文字，由你决定何时将内容发送给 AI，流式生成参考答案，让你在面试中更加从容自信。
+
+**Keywords:** interview AI, interview copilot, real-time speech-to-text, ASR, LLM, job interview assistant, coding interview, AI copilot, 面试助手, AI面试
 
 ---
 
@@ -207,3 +219,13 @@ go test ./internal/llm -run Integration
 ## 开源协议
 
 本项目采用开源许可证，欢迎贡献与二次开发。
+
+---
+
+## Similar Projects / 相关项目
+
+If you find OpenInterview useful, you might also like:
+- [Interview Copilot](https://interviewcopilot.io) — paid SaaS alternative
+- [Final Round AI](https://finalroundai.com) — paid SaaS alternative
+
+**OpenInterview** is the **free, open-source** alternative. ⭐ Star us if it helps!
