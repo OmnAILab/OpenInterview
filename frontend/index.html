@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>OpenInterview</title>
+    <title data-i18n-document-title="app.title">OpenInterview</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -14,16 +14,16 @@
             <div class="brand-mark">OI</div>
             <div class="brand-copy">
               <div class="eyebrow">OpenInterview</div>
-              <h1>Sessions</h1>
+              <h1 data-i18n="sidebar.sessions">Sessions</h1>
             </div>
           </div>
 
           <label class="field">
-            <span>Backend</span>
+            <span data-i18n="sidebar.backend">Backend</span>
             <input id="backendBaseUrl" value="http://localhost:8080" />
           </label>
 
-          <button id="createSessionBtn" class="primary">New Session</button>
+          <button id="createSessionBtn" class="primary" data-i18n="sidebar.newSession">New Session</button>
         </div>
 
         <div class="sidebar-body">
@@ -33,11 +33,11 @@
         <div class="sidebar-bottom">
           <div class="status-card">
             <div class="status-row">
-              <span>Listening</span>
+              <span data-i18n="status.listening">Listening</span>
               <strong id="listeningState">false</strong>
             </div>
             <div class="status-row">
-              <span>Answering</span>
+              <span data-i18n="status.answering">Answering</span>
               <strong id="answeringState">false</strong>
             </div>
             <div class="status-row">
@@ -51,19 +51,19 @@
           </div>
 
           <div class="sidebar-actions">
-            <button id="startListeningBtn" class="primary">Start Listen</button>
-            <button id="stopListeningBtn" class="secondary">Stop</button>
-            <button id="resetSessionBtn" class="ghost">Reset</button>
+            <button id="startListeningBtn" class="primary" data-i18n="controls.startListen">Start Listen</button>
+            <button id="stopListeningBtn" class="secondary" data-i18n="controls.stop">Stop</button>
+            <button id="resetSessionBtn" class="ghost" data-i18n="controls.reset">Reset</button>
           </div>
 
-          <button id="openSettingsBtn" class="secondary">Settings</button>
+          <button id="openSettingsBtn" class="secondary" data-i18n="controls.settings">Settings</button>
         </div>
       </aside>
 
       <main class="main-stage">
         <header class="stage-topbar">
           <div class="stage-copy">
-            <div class="eyebrow">Interview Copilot</div>
+            <div class="eyebrow" data-i18n="stage.eyebrow">Interview Copilot</div>
             <h2 id="activeSessionTitle">No Active Session</h2>
             <p id="dockHint" class="stage-hint">Create a session to begin.</p>
           </div>
@@ -71,15 +71,15 @@
           <div class="header-side">
             <div class="header-meta">
               <div class="meta-chip">
-                <span>Session</span>
+                <span data-i18n="stage.session">Session</span>
                 <strong id="activeSessionId">none</strong>
               </div>
               <div class="meta-chip">
-                <span>Audio</span>
+                <span data-i18n="stage.audio">Audio</span>
                 <strong id="audioStats">0 chunks</strong>
               </div>
             </div>
-            <button id="deleteSessionBtn" class="ghost">Delete Session</button>
+            <button id="deleteSessionBtn" class="ghost" data-i18n="controls.deleteSession">Delete Session</button>
           </div>
         </header>
 
@@ -87,7 +87,7 @@
           <section class="workspace-column chat-shell">
             <div class="section-label">
               <div class="eyebrow">LLM</div>
-              <h3>Interview Response</h3>
+              <h3 data-i18n="stage.interviewResponse">Interview Response</h3>
             </div>
             <section class="chat-panel panel">
               <section id="conversation" class="conversation"></section>
@@ -97,29 +97,29 @@
           <aside class="workspace-column transcript-shell">
             <div class="section-label">
               <div class="eyebrow">Textdeal</div>
-              <h3>Stable Transcript</h3>
+              <h3 data-i18n="stage.stableTranscript">Stable Transcript</h3>
             </div>
 
             <section class="transcript-panel panel">
               <div class="transcript-summary">
                 <div class="summary-item">
-                  <span>Partial</span>
+                  <span data-i18n="stage.partial">Partial</span>
                   <div id="partialTranscript" class="summary-text muted">Waiting for transcript.</div>
                 </div>
                 <div class="summary-item">
-                  <span>Pending</span>
+                  <span data-i18n="stage.pending">Pending</span>
                   <div id="pendingSegment" class="summary-text muted">No unsent stable text.</div>
                 </div>
               </div>
 
               <label class="editor-wrap">
-                <span>Click to place the next stop marker</span>
-                <textarea id="transcriptEditor" readonly placeholder="Stable transcript will appear here."></textarea>
+                <span data-i18n="stage.placeStop">Click to place the next stop marker</span>
+                <textarea id="transcriptEditor" readonly placeholder="Stable transcript will appear here." data-i18n-placeholder="stage.transcriptPlaceholder"></textarea>
               </label>
 
               <div class="transcript-actions">
-                <button id="sendCursorSegmentBtn" class="secondary">Send To Cursor</button>
-                <button id="sendTailSegmentBtn" class="ghost">Send Pending Tail</button>
+                <button id="sendCursorSegmentBtn" class="secondary" data-i18n="controls.sendToCursor">Send To Cursor</button>
+                <button id="sendTailSegmentBtn" class="ghost" data-i18n="controls.sendPendingTail">Send Pending Tail</button>
               </div>
             </section>
           </aside>
@@ -134,54 +134,78 @@
       <section class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
         <header class="settings-header">
           <div>
-            <div class="eyebrow">Capture Settings</div>
-            <h3 id="settingsTitle">Audio Source</h3>
+            <div class="eyebrow" data-i18n="settings.eyebrow">Capture Settings</div>
+            <h3 id="settingsTitle" data-i18n="settings.title">Audio Source</h3>
           </div>
-          <button id="closeSettingsBtn" class="ghost">Close</button>
+          <button id="closeSettingsBtn" class="ghost" data-i18n="controls.close">Close</button>
         </header>
 
         <div class="settings-body">
           <section class="settings-section">
             <div class="section-label">
-              <div class="eyebrow">Source</div>
-              <h3>Choose What To Capture</h3>
+              <div class="eyebrow" data-i18n="settings.languageEyebrow">Language</div>
+              <h3 data-i18n="settings.languageTitle">Display Language</h3>
+            </div>
+
+            <label class="field">
+              <span data-i18n="settings.languageLabel">Language</span>
+              <select id="languageSelect"></select>
+            </label>
+          </section>
+
+          <section class="settings-section">
+            <div class="section-label">
+              <div class="eyebrow" data-i18n="settings.themeEyebrow">Theme</div>
+              <h3 data-i18n="settings.themeTitle">Appearance</h3>
+            </div>
+
+            <label class="field">
+              <span data-i18n="settings.themeLabel">Theme Mode</span>
+              <select id="themeSelect"></select>
+            </label>
+          </section>
+
+          <section class="settings-section">
+            <div class="section-label">
+              <div class="eyebrow" data-i18n="settings.sourceEyebrow">Source</div>
+              <h3 data-i18n="settings.sourceTitle">Choose What To Capture</h3>
             </div>
 
             <label class="source-option">
               <input type="radio" name="captureSource" value="microphone" id="captureSourceMicrophone" />
               <div>
-                <strong>Microphone</strong>
-                <p>Capture a selected audio input device.</p>
+                <strong data-i18n="settings.microphoneTitle">Microphone</strong>
+                <p data-i18n="settings.microphoneDesc">Capture a selected audio input device.</p>
               </div>
             </label>
 
             <label class="source-option">
               <input type="radio" name="captureSource" value="speaker" id="captureSourceSpeaker" />
               <div>
-                <strong>Speaker / System Audio</strong>
-                <p>Capture shared tab, window, or screen audio through the browser share dialog.</p>
+                <strong data-i18n="settings.speakerTitle">Speaker / System Audio</strong>
+                <p data-i18n="settings.speakerDesc">Capture shared tab, window, or screen audio through the browser share dialog.</p>
               </div>
             </label>
           </section>
 
           <section id="microphoneSettingsSection" class="settings-section">
             <div class="section-label">
-              <div class="eyebrow">Microphone</div>
-              <h3>Input Device</h3>
+              <div class="eyebrow" data-i18n="settings.microphoneEyebrow">Microphone</div>
+              <h3 data-i18n="settings.inputDeviceTitle">Input Device</h3>
             </div>
 
             <label class="field">
-              <span>Device</span>
+              <span data-i18n="settings.deviceLabel">Device</span>
               <select id="audioInputSelect"></select>
             </label>
 
-            <button id="refreshAudioDevicesBtn" class="secondary">Refresh Devices</button>
+            <button id="refreshAudioDevicesBtn" class="secondary" data-i18n="controls.refreshDevices">Refresh Devices</button>
           </section>
 
           <section class="settings-section">
             <div class="section-label">
-              <div class="eyebrow">Notes</div>
-              <h3>Browser Behavior</h3>
+              <div class="eyebrow" data-i18n="settings.notesEyebrow">Notes</div>
+              <h3 data-i18n="settings.notesTitle">Browser Behavior</h3>
             </div>
             <p id="audioDeviceHint" class="settings-note">
               Changes apply the next time listening starts.
@@ -190,7 +214,7 @@
         </div>
 
         <footer class="settings-footer">
-          <button id="saveSettingsBtn" class="primary">Save Settings</button>
+          <button id="saveSettingsBtn" class="primary" data-i18n="controls.saveSettings">Save Settings</button>
         </footer>
       </section>
     </div>

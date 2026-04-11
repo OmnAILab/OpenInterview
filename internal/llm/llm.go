@@ -52,14 +52,10 @@ func NewClient(cfg Config, logger *log.Logger) Client {
 	switch strings.ToLower(cfg.Provider) {
 	case "", "mock":
 		return &mockClient{}
-	case "openai-compatible", "openai_compatible", "groq":
-		return &openAICompatibleClient{
-			cfg: cfg,
-			httpClient: &http.Client{
-				Timeout: cfg.Timeout,
-			},
-			logger: logger,
-		}
+	case "openai-compatible", "openai_compatible":
+		return newOpenAICompatibleClient(cfg, logger)
+	case "groq":
+		return newGroqClient(cfg, logger)
 	default:
 		return &mockClient{}
 	}
@@ -93,12 +89,26 @@ type openAICompatibleClient struct {
 	logger     *log.Logger
 }
 
+func newOpenAICompatibleClient(cfg Config, logger *log.Logger) Client {
+	return &openAICompatibleClient{
+		cfg: cfg,
+		httpClient: &http.Client{
+			Timeout: cfg.Timeout,
+		},
+		logger: logger,
+	}
+}
+
 func (c *openAICompatibleClient) StreamAnswer(ctx context.Context, request Request, sink TokenSink) (string, error) {
+	return streamOpenAICompatibleAnswer(ctx, c.cfg, c.httpClient, request, sink)
+}
+
+func streamOpenAICompatibleAnswer(ctx context.Context, cfg Config, httpClient *http.Client, request Request, sink TokenSink) (string, error) {
 	payload := map[string]any{
-		"model":       c.cfg.Model,
-		"messages":    prependSystemPrompt(c.cfg.SystemPrompt, request.Messages),
+		"model":       cfg.Model,
+		"messages":    prependSystemPrompt(cfg.SystemPrompt, request.Messages),
 		"stream":      true,
-		"temperature": c.cfg.Temperature,
+		"temperature": cfg.Temperature,
 	}
 
 	body, err := json.Marshal(payload)
@@ -106,17 +116,17 @@ func (c *openAICompatibleClient) StreamAnswer(ctx context.Context, request Reque
 		return "", err
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, joinURL(c.cfg.BaseURL, c.cfg.Endpoint), bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, joinURL(cfg.BaseURL, cfg.Endpoint), bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
-	if c.cfg.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
+	if cfg.APIKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 	}
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := httpClient.Do(httpReq)
 	if err != nil {
 		return "", err
 	}

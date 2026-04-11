@@ -2,6 +2,219 @@ const SESSION_STORAGE_KEY = "openinterview.frontend.sessions";
 const BACKEND_STORAGE_KEY = "openinterview.frontend.backend";
 const AUDIO_INPUT_STORAGE_KEY = "openinterview.frontend.audioInputId";
 const CAPTURE_SOURCE_STORAGE_KEY = "openinterview.frontend.captureSource";
+const LANGUAGE_STORAGE_KEY = "openinterview.frontend.language";
+const THEME_STORAGE_KEY = "openinterview.frontend.theme";
+
+const translations = {
+  "zh-CN": {
+    "app.title": "OpenInterview",
+    "sidebar.sessions": "会话",
+    "sidebar.backend": "后端",
+    "sidebar.newSession": "新建会话",
+    "status.listening": "监听中",
+    "status.answering": "回答中",
+    "status.true": "是",
+    "status.false": "否",
+    "status.idle": "空闲",
+    "status.answeringValue": "回答中",
+    "status.listeningValue": "监听中",
+    "controls.startListen": "开始监听",
+    "controls.stop": "停止",
+    "controls.reset": "重置",
+    "controls.settings": "设置",
+    "controls.deleteSession": "删除会话",
+    "controls.sendToCursor": "发送到LLM",
+    "controls.sendPendingTail": "截止符",
+    "controls.close": "关闭",
+    "controls.refreshDevices": "刷新设备",
+    "controls.saveSettings": "保存设置",
+    "stage.eyebrow": "面试助手",
+    "stage.session": "会话",
+    "stage.audio": "音频",
+    "stage.interviewResponse": "LLM 回答",
+    "stage.stableTranscript": "稳态文本",
+    "stage.partial": "临时结果",
+    "stage.pending": "待发送",
+    "stage.placeStop": "点击放置下一个停止符",
+    "stage.transcriptPlaceholder": "稳态文本会显示在这里。",
+    "stage.noActiveSession": "当前没有会话",
+    "stage.createSessionHint": "从左侧创建或选择一个会话。",
+    "stage.awaitingTranscript": "等待转写结果。",
+    "stage.noPendingStableText": "暂无未发送的稳态文本。",
+    "stage.noAnswerYet": "还没有回答。开始监听并手动发送一段稳态文本给 LLM。",
+    "stage.waitingAnswer": "等待回答。",
+    "stage.question": "问题",
+    "stage.answer": "回答",
+    "stage.system": "系统",
+    "session.defaultTitle": "会话 {id}",
+    "session.newTitle": "新会话",
+    "session.readyToListen": "准备开始监听",
+    "session.awaitingInput": "等待输入",
+    "session.none": "无",
+    "session.noneFound": "暂无会话",
+    "session.createToBegin": "创建一个会话开始使用。",
+    "session.deletedShort": "已删除会话 {id}。",
+    "session.deleted": "会话已删除。",
+    "settings.eyebrow": "设置",
+    "settings.title": "采集与界面",
+    "settings.languageEyebrow": "语言",
+    "settings.languageTitle": "界面语言",
+    "settings.languageLabel": "语言",
+    "settings.themeEyebrow": "主题",
+    "settings.themeTitle": "外观",
+    "settings.themeLabel": "主题模式",
+    "settings.themeSystem": "跟随系统",
+    "settings.themeLight": "浅色",
+    "settings.themeDark": "深色",
+    "settings.sourceEyebrow": "音频来源",
+    "settings.sourceTitle": "选择采集对象",
+    "settings.microphoneTitle": "麦克风",
+    "settings.microphoneDesc": "采集指定的音频输入设备。",
+    "settings.speakerTitle": "扬声器 / 系统音频",
+    "settings.speakerDesc": "通过浏览器共享窗口，采集标签页、窗口或屏幕中的音频。",
+    "settings.microphoneEyebrow": "麦克风",
+    "settings.inputDeviceTitle": "输入设备",
+    "settings.deviceLabel": "设备",
+    "settings.notesEyebrow": "说明",
+    "settings.notesTitle": "浏览器行为",
+    "settings.noMicrophones": "未找到麦克风设备",
+    "settings.microphoneFallback": "麦克风 {index}",
+    "settings.savedSpeaker": "设置已保存。开始监听后会请求共享扬声器/系统音频。",
+    "settings.savedMicrophone": "设置已保存。开始监听后会使用已选择的麦克风。",
+    "settings.noEnumeration": "当前浏览器不支持音频设备枚举。",
+    "settings.noteSpeaker": "扬声器采集依赖浏览器共享音频。请使用 Chrome 或 Edge，并在弹窗中选择标签页、窗口或屏幕后启用音频共享。",
+    "settings.noteMicrophoneActive": "麦克风切换会在下次开始监听时生效。",
+    "settings.noteMicrophoneIdle": "选择开始监听时要使用的麦克风。",
+    "runtime.unknown": "未知",
+    "runtime.offline": "离线",
+    "runtime.audioChunks": "{count} 个音频块",
+    "hint.eventsDisconnected": "事件流已断开，浏览器会自动重连。",
+    "hint.listeningSpeaker": "正在采集扬声器/系统音频，请确认浏览器共享音频已开启。",
+    "hint.listeningMicrophone": "正在采集麦克风音频，稳态文本会持续累积在右侧。",
+    "hint.listeningStopped": "已停止监听。",
+    "hint.sessionReset": "会话已重置。",
+    "hint.segmentSubmitted": "片段已提交给 LLM，回答会继续显示在中间面板。",
+    "hint.llmResponding": "LLM 正在生成回答。",
+    "hint.llmDone": "LLM 已完成回答。",
+    "hint.llmCancelled": "LLM 已取消。",
+    "hint.llmInterrupted": "上一轮回答已被新的片段打断。",
+    "error.moveStopForward": "请将停止符继续向后移动后再发送。",
+    "error.noPendingStableText": "当前没有可发送的剩余稳态文本。",
+    "error.noActiveSession": "当前没有会话，请先创建一个。",
+    "error.captureRunning": "音频采集已经在运行中。",
+    "error.noAudioTrack": "所选来源没有可用的音轨。",
+    "error.noWebAudio": "当前浏览器不支持 Web Audio API。",
+    "error.noDisplayMedia": "当前浏览器不支持扬声器/系统音频采集。",
+    "error.speakerRequiresChromium": "扬声器/系统音频采集目前需要 Chrome 或 Edge，Firefox 和 Safari 通常不会暴露可共享的系统音轨。",
+    "error.noSharedAudioTrack": "未拿到共享音轨。请在浏览器共享弹窗中选择支持音频的标签页、窗口或屏幕，并启用音频共享。",
+    "error.failedToParse": "解析 {label} 失败：{message}",
+    "error.unknownBackend": "未知后端错误",
+  },
+  "en-US": {
+    "app.title": "OpenInterview",
+    "sidebar.sessions": "Sessions",
+    "sidebar.backend": "Backend",
+    "sidebar.newSession": "New Session",
+    "status.listening": "Listening",
+    "status.answering": "Answering",
+    "status.true": "true",
+    "status.false": "false",
+    "status.idle": "idle",
+    "status.answeringValue": "answering",
+    "status.listeningValue": "listening",
+    "controls.startListen": "Start Listen",
+    "controls.stop": "Stop",
+    "controls.reset": "Reset",
+    "controls.settings": "Settings",
+    "controls.deleteSession": "Delete Session",
+    "controls.sendToCursor": "Send To LLM",
+    "controls.sendPendingTail": "Pending Tail",
+    "controls.close": "Close",
+    "controls.refreshDevices": "Refresh Devices",
+    "controls.saveSettings": "Save Settings",
+    "stage.eyebrow": "Interview Copilot",
+    "stage.session": "Session",
+    "stage.audio": "Audio",
+    "stage.interviewResponse": "Interview Response",
+    "stage.stableTranscript": "Stable Transcript",
+    "stage.partial": "Partial",
+    "stage.pending": "Pending",
+    "stage.placeStop": "Click to place the next stop marker",
+    "stage.transcriptPlaceholder": "Stable transcript will appear here.",
+    "stage.noActiveSession": "No Active Session",
+    "stage.createSessionHint": "Create or select a session from the left.",
+    "stage.awaitingTranscript": "Waiting for transcript.",
+    "stage.noPendingStableText": "No unsent stable text.",
+    "stage.noAnswerYet": "No answer yet. Start listening and send a stable segment to the LLM.",
+    "stage.waitingAnswer": "Waiting for answer.",
+    "stage.question": "Question",
+    "stage.answer": "Answer",
+    "stage.system": "System",
+    "session.defaultTitle": "Session {id}",
+    "session.newTitle": "New Session",
+    "session.readyToListen": "Ready to listen",
+    "session.awaitingInput": "Awaiting input",
+    "session.none": "none",
+    "session.noneFound": "No sessions",
+    "session.createToBegin": "Create a session to begin.",
+    "session.deletedShort": "Deleted session {id}.",
+    "session.deleted": "Session deleted.",
+    "settings.eyebrow": "Settings",
+    "settings.title": "Capture & Interface",
+    "settings.languageEyebrow": "Language",
+    "settings.languageTitle": "Display Language",
+    "settings.languageLabel": "Language",
+    "settings.themeEyebrow": "Theme",
+    "settings.themeTitle": "Appearance",
+    "settings.themeLabel": "Theme Mode",
+    "settings.themeSystem": "System",
+    "settings.themeLight": "Light",
+    "settings.themeDark": "Dark",
+    "settings.sourceEyebrow": "Source",
+    "settings.sourceTitle": "Choose What To Capture",
+    "settings.microphoneTitle": "Microphone",
+    "settings.microphoneDesc": "Capture a selected audio input device.",
+    "settings.speakerTitle": "Speaker / System Audio",
+    "settings.speakerDesc": "Capture shared tab, window, or screen audio through the browser share dialog.",
+    "settings.microphoneEyebrow": "Microphone",
+    "settings.inputDeviceTitle": "Input Device",
+    "settings.deviceLabel": "Device",
+    "settings.notesEyebrow": "Notes",
+    "settings.notesTitle": "Browser Behavior",
+    "settings.noMicrophones": "No microphones found",
+    "settings.microphoneFallback": "Microphone {index}",
+    "settings.savedSpeaker": "Settings saved. Start listening to share speaker/system audio.",
+    "settings.savedMicrophone": "Settings saved. Start listening to use the selected microphone.",
+    "settings.noEnumeration": "This browser does not support audio device enumeration.",
+    "settings.noteSpeaker": "Speaker capture uses the browser share dialog. Use Chrome or Edge, then choose a tab, window, or screen and enable audio sharing when prompted.",
+    "settings.noteMicrophoneActive": "Microphone changes apply the next time listening starts.",
+    "settings.noteMicrophoneIdle": "Choose which microphone to use when listening starts.",
+    "runtime.unknown": "unknown",
+    "runtime.offline": "offline",
+    "runtime.audioChunks": "{count} chunks",
+    "hint.eventsDisconnected": "Event stream disconnected. Browser will retry automatically.",
+    "hint.listeningSpeaker": "Listening for speaker/system audio. Make sure browser audio sharing is enabled.",
+    "hint.listeningMicrophone": "Listening for microphone audio. Stable transcript will accumulate below.",
+    "hint.listeningStopped": "Listening stopped.",
+    "hint.sessionReset": "Session reset.",
+    "hint.segmentSubmitted": "Segment submitted to LLM. The answer stream will continue in the center panel.",
+    "hint.llmResponding": "LLM is responding.",
+    "hint.llmDone": "LLM finished answering.",
+    "hint.llmCancelled": "LLM cancelled.",
+    "hint.llmInterrupted": "Previous answer interrupted by a new segment.",
+    "error.moveStopForward": "Move the stop marker forward before sending.",
+    "error.noPendingStableText": "There is no pending stable text to send.",
+    "error.noActiveSession": "No active session. Create one first.",
+    "error.captureRunning": "Audio capture is already running.",
+    "error.noAudioTrack": "No audio track is available from the selected source.",
+    "error.noWebAudio": "Web Audio API is not available in this browser",
+    "error.noDisplayMedia": "This browser does not support speaker/system audio capture.",
+    "error.speakerRequiresChromium": "Speaker/system audio capture currently requires Chrome or Edge. Firefox and Safari usually do not expose a shareable system-audio track.",
+    "error.noSharedAudioTrack": "No shared audio track was provided. In the browser share dialog, select a tab/window/screen that supports audio and enable audio sharing.",
+    "error.failedToParse": "Failed to parse {label}: {message}",
+    "error.unknownBackend": "Unknown backend error",
+  },
+};
 
 const elements = {
   backendBaseUrl: document.getElementById("backendBaseUrl"),
@@ -25,6 +238,8 @@ const elements = {
   audioInputSelect: document.getElementById("audioInputSelect"),
   refreshAudioDevicesBtn: document.getElementById("refreshAudioDevicesBtn"),
   audioDeviceHint: document.getElementById("audioDeviceHint"),
+  languageSelect: document.getElementById("languageSelect"),
+  themeSelect: document.getElementById("themeSelect"),
   deleteSessionBtn: document.getElementById("deleteSessionBtn"),
   activeSessionTitle: document.getElementById("activeSessionTitle"),
   activeSessionId: document.getElementById("activeSessionId"),
@@ -44,6 +259,12 @@ const state = {
   runtime: {
     sttProvider: "",
     llmModel: "",
+  },
+  preferences: {
+    language: localStorage.getItem(LANGUAGE_STORAGE_KEY) || inferInitialLanguage(),
+    theme: localStorage.getItem(THEME_STORAGE_KEY) || "system",
+    draftLanguage: "",
+    draftTheme: "system",
   },
   audio: {
     devices: [],
@@ -71,6 +292,7 @@ function boot() {
     elements.backendBaseUrl.value = storedBackend;
   }
 
+  initializePreferences();
   bindActions();
   initializeAudioSettings();
   renderRuntime();
@@ -96,6 +318,8 @@ function bindActions() {
   elements.captureSourceMicrophone.addEventListener("change", handleCaptureSourceDraftChange);
   elements.captureSourceSpeaker.addEventListener("change", handleCaptureSourceDraftChange);
   elements.audioInputSelect.addEventListener("change", handleAudioDeviceDraftChange);
+  elements.languageSelect.addEventListener("change", handleLanguageDraftChange);
+  elements.themeSelect.addEventListener("change", handleThemeDraftChange);
   elements.refreshAudioDevicesBtn.addEventListener("click", () => runAction(() => refreshAudioDevices({ requestPermission: true })));
   elements.deleteSessionBtn.addEventListener("click", () => runAction(deleteActiveSession));
   elements.dockStartBtn?.addEventListener("click", () => runAction(startListening));
@@ -107,6 +331,21 @@ function bindActions() {
   elements.transcriptEditor.addEventListener("select", syncTranscriptCursorFromSelection);
   document.addEventListener("keydown", handleGlobalKeydown);
   window.addEventListener("beforeunload", closeEvents);
+}
+
+function initializePreferences() {
+  if (!translations[state.preferences.language]) {
+    state.preferences.language = "en-US";
+  }
+  if (!["system", "light", "dark"].includes(state.preferences.theme)) {
+    state.preferences.theme = "system";
+  }
+
+  state.preferences.draftLanguage = state.preferences.language;
+  state.preferences.draftTheme = state.preferences.theme;
+
+  applyTheme();
+  renderTranslations();
 }
 
 async function runAction(action) {
@@ -133,7 +372,7 @@ function initializeAudioSettings() {
   }
   state.audio.draftCaptureSource = state.audio.captureSource;
   state.audio.draftDeviceId = state.audio.selectedDeviceId;
-  renderAudioSettingsModal();
+  renderSettingsModal();
   void refreshAudioDevices({ requestPermission: false }).catch(() => {});
 
   if (navigator.mediaDevices?.addEventListener) {
@@ -158,13 +397,15 @@ async function openSettingsModal() {
   state.audio.settingsOpen = true;
   state.audio.draftCaptureSource = state.audio.captureSource;
   state.audio.draftDeviceId = state.audio.selectedDeviceId;
-  renderAudioSettingsModal();
+  state.preferences.draftLanguage = state.preferences.language;
+  state.preferences.draftTheme = state.preferences.theme;
+  renderSettingsModal();
   await refreshAudioDevices({ requestPermission: false });
 }
 
 function closeSettingsModal() {
   state.audio.settingsOpen = false;
-  renderAudioSettingsModal();
+  renderSettingsModal();
 }
 
 function handleGlobalKeydown(event) {
@@ -175,22 +416,36 @@ function handleGlobalKeydown(event) {
 
 function handleCaptureSourceDraftChange() {
   state.audio.draftCaptureSource = elements.captureSourceSpeaker.checked ? "speaker" : "microphone";
-  renderAudioSettingsModal();
+  renderSettingsModal();
 }
 
 function handleAudioDeviceDraftChange() {
   state.audio.draftDeviceId = elements.audioInputSelect.value;
 }
 
+function handleLanguageDraftChange() {
+  state.preferences.draftLanguage = elements.languageSelect.value;
+}
+
+function handleThemeDraftChange() {
+  state.preferences.draftTheme = elements.themeSelect.value;
+}
+
 async function saveAudioSettings() {
+  state.preferences.language = normalizeLanguage(elements.languageSelect.value || state.preferences.draftLanguage);
+  state.preferences.theme = normalizeTheme(elements.themeSelect.value || state.preferences.draftTheme);
+  persistPreferences();
+  applyTheme();
+  renderTranslations();
+
   state.audio.captureSource = state.audio.draftCaptureSource;
   state.audio.selectedDeviceId = state.audio.draftDeviceId;
   persistAudioSettings();
   closeSettingsModal();
   renderDockHint(
     state.audio.captureSource === "speaker"
-      ? "Settings saved. Start listening to share speaker/system audio."
-      : "Settings saved. Start listening to use the selected microphone.",
+      ? t("settings.savedSpeaker")
+      : t("settings.savedMicrophone"),
   );
 }
 
@@ -199,7 +454,7 @@ async function refreshAudioDevices(options = {}) {
 
   if (!navigator.mediaDevices?.enumerateDevices) {
     state.audio.devices = [];
-    renderAudioSettingsModal("This browser does not support audio device enumeration.");
+    renderSettingsModal(t("settings.noEnumeration"));
     return;
   }
 
@@ -211,11 +466,11 @@ async function refreshAudioDevices(options = {}) {
   const audioInputs = devices.filter((device) => device.kind === "audioinput");
   state.audio.devices = audioInputs.map((device, index) => ({
     id: device.deviceId,
-    label: device.label || `Microphone ${index + 1}`,
+    label: device.label || t("settings.microphoneFallback", { index: String(index + 1) }),
   }));
 
   syncAudioDeviceSelection();
-  renderAudioSettingsModal();
+  renderSettingsModal();
 }
 
 async function requestMicrophonePermission() {
@@ -256,11 +511,15 @@ function syncAudioDeviceSelection() {
   persistAudioSettings();
 }
 
-function renderAudioSettingsModal(message) {
+function renderSettingsModal(message) {
   elements.settingsModal.hidden = !state.audio.settingsOpen;
   elements.captureSourceMicrophone.checked = state.audio.draftCaptureSource !== "speaker";
   elements.captureSourceSpeaker.checked = state.audio.draftCaptureSource === "speaker";
   elements.microphoneSettingsSection.hidden = state.audio.draftCaptureSource === "speaker";
+  elements.languageSelect.innerHTML = buildLanguageOptions();
+  elements.themeSelect.innerHTML = buildThemeOptions();
+  elements.languageSelect.value = normalizeLanguage(state.preferences.draftLanguage);
+  elements.themeSelect.value = normalizeTheme(state.preferences.draftTheme);
 
   const options = state.audio.devices.length > 0
     ? state.audio.devices
@@ -269,16 +528,16 @@ function renderAudioSettingsModal(message) {
           return `<option value="${escapeHTML(device.id)}"${selected}>${escapeHTML(device.label)}</option>`;
         })
         .join("")
-    : `<option value="">No microphones found</option>`;
+    : `<option value="">${escapeHTML(t("settings.noMicrophones"))}</option>`;
   elements.audioInputSelect.innerHTML = options;
   elements.audioInputSelect.disabled = state.audio.devices.length === 0;
 
   const defaultMessage =
     state.audio.draftCaptureSource === "speaker"
-      ? "Speaker capture uses the browser share dialog. Use Chrome or Edge, then choose a tab, window, or screen and enable audio sharing when prompted."
+      ? t("settings.noteSpeaker")
       : state.capture
-        ? "Microphone changes apply the next time listening starts."
-        : "Choose which microphone to use when listening starts.";
+        ? t("settings.noteMicrophoneActive")
+        : t("settings.noteMicrophoneIdle");
   elements.audioDeviceHint.textContent = message || defaultMessage;
 }
 
@@ -287,8 +546,8 @@ async function createSession() {
   const snapshot = await requestJSON("POST", "/api/sessions");
   upsertSessionMeta({
     id: snapshot.id,
-    title: "New Session",
-    preview: "Ready to listen",
+    title: t("session.newTitle"),
+    preview: t("session.readyToListen"),
     createdAt: new Date().toISOString(),
     listening: false,
     answering: false,
@@ -360,7 +619,7 @@ function openEventsForActiveSession() {
   }
 
   source.onerror = () => {
-    renderDockHint("Event stream disconnected. Browser will retry automatically.");
+    renderDockHint(t("hint.eventsDisconnected"));
   };
 }
 
@@ -391,8 +650,8 @@ async function startListening() {
 
   renderDockHint(
     state.audio.captureSource === "speaker"
-      ? "Listening for speaker/system audio. Make sure browser audio sharing is enabled."
-      : "Listening for microphone audio. Stable transcript will accumulate below.",
+      ? t("hint.listeningSpeaker")
+      : t("hint.listeningMicrophone"),
   );
 }
 
@@ -405,14 +664,14 @@ async function stopListening() {
   }
 
   await requestJSON("POST", `/api/sessions/${encodeURIComponent(state.activeSessionId)}/listen/stop`);
-  renderDockHint("Listening stopped.");
+  renderDockHint(t("hint.listeningStopped"));
 }
 
 async function resetSession() {
   ensureActiveSession();
   await stopCaptureIfNeeded();
   await requestJSON("POST", `/api/sessions/${encodeURIComponent(state.activeSessionId)}/reset`);
-  renderDockHint("Session reset.");
+  renderDockHint(t("hint.sessionReset"));
 }
 
 async function deleteActiveSession() {
@@ -429,13 +688,13 @@ async function deleteActiveSession() {
 
   if (nextSession) {
     await selectSession(nextSession.id, { openEvents: true });
-    renderDockHint(`Deleted session ${sessionID.slice(0, 8)}.`);
+    renderDockHint(t("session.deletedShort", { id: sessionID.slice(0, 8) }));
     return;
   }
 
   state.activeSessionId = "";
   renderEmptyStage();
-  renderDockHint("Session deleted.");
+  renderDockHint(t("session.deleted"));
 }
 
 function queueAudioChunk(payload) {
@@ -472,7 +731,7 @@ async function sendSegmentToCursor() {
   ensureActiveSession();
   const stop = getTranscriptCursorRaw();
   if (stop <= state.textDeal.sentUntil) {
-    throw new Error("Move the stop marker forward before sending.");
+    throw new Error(t("error.moveStopForward"));
   }
   await submitTextDealStop(stop);
 }
@@ -481,7 +740,7 @@ async function sendPendingTail() {
   ensureActiveSession();
   const stop = codePointLength(state.textDeal.stableText);
   if (stop <= state.textDeal.sentUntil) {
-    throw new Error("There is no pending stable text to send.");
+    throw new Error(t("error.noPendingStableText"));
   }
   state.transcriptCursorRaw = stop;
   await submitTextDealStop(stop);
@@ -491,7 +750,7 @@ async function submitTextDealStop(stop) {
   await requestJSON("POST", `/api/sessions/${encodeURIComponent(state.activeSessionId)}/textdeal/segment`, {
     stop,
   });
-  renderDockHint("Segment submitted to LLM. The answer stream will continue in the center panel.");
+  renderDockHint(t("hint.segmentSubmitted"));
 }
 
 function handleEvent(type, record) {
@@ -536,7 +795,7 @@ function handleEvent(type, record) {
         renderConversation();
         renderSnapshotState();
       }
-      renderDockHint("LLM is responding.");
+      renderDockHint(t("hint.llmResponding"));
       break;
     case "llm.token":
       if (state.snapshot) {
@@ -551,12 +810,12 @@ function handleEvent(type, record) {
         renderConversation();
         renderSnapshotState();
       }
-      renderDockHint("LLM finished answering.");
+      renderDockHint(t("hint.llmDone"));
       void refreshActiveSnapshot();
       break;
     case "llm.cancelled":
     case "llm.interrupted":
-      renderDockHint(type === "llm.cancelled" ? "LLM cancelled." : "Previous answer interrupted by a new segment.");
+      renderDockHint(type === "llm.cancelled" ? t("hint.llmCancelled") : t("hint.llmInterrupted"));
       break;
     case "session.reset":
       if (state.snapshot) {
@@ -572,7 +831,7 @@ function handleEvent(type, record) {
       }
       break;
     case "error":
-      renderSystemMessage(payload.message || "Unknown backend error");
+      renderSystemMessage(payload.message || t("error.unknownBackend"));
       break;
     default:
       break;
@@ -597,7 +856,7 @@ function applySnapshot(snapshot) {
   upsertSessionMeta({
     id: state.activeSessionId,
     title: buildSessionTitle(snapshot),
-    preview: snapshot.currentQuestion || snapshot.textDeal?.pendingText || "Awaiting input",
+    preview: snapshot.currentQuestion || snapshot.textDeal?.pendingText || t("session.awaitingInput"),
     createdAt: findSessionMeta(state.activeSessionId)?.createdAt || new Date().toISOString(),
     listening: Boolean(snapshot.listening),
     answering: Boolean(snapshot.answerInProgress),
@@ -622,10 +881,10 @@ function applyTextDealSnapshot(textDeal) {
 function renderSnapshotState() {
   const snapshot = state.snapshot;
   elements.activeSessionTitle.textContent = buildSessionTitle(snapshot);
-  elements.activeSessionId.textContent = snapshot?.id || "none";
-  elements.listeningState.textContent = String(Boolean(snapshot?.listening));
-  elements.answeringState.textContent = String(Boolean(snapshot?.answerInProgress));
-  elements.audioStats.textContent = `${snapshot?.audio?.chunks || 0} chunks`;
+  elements.activeSessionId.textContent = snapshot?.id || t("session.none");
+  elements.listeningState.textContent = t(`status.${Boolean(snapshot?.listening)}`);
+  elements.answeringState.textContent = t(`status.${Boolean(snapshot?.answerInProgress)}`);
+  elements.audioStats.textContent = formatAudioChunks(snapshot?.audio?.chunks || 0);
 }
 
 function renderConversation() {
@@ -639,7 +898,7 @@ function renderConversation() {
   const history = Array.isArray(snapshot.history) ? snapshot.history : [];
 
   if (history.length === 0 && !snapshot.currentQuestion && !snapshot.currentAnswer) {
-    parts.push(systemMessageMarkup("No answer yet. Start listening and send a stable segment to the LLM."));
+    parts.push(systemMessageMarkup(t("stage.noAnswerYet")));
   }
 
   for (const turn of history) {
@@ -667,8 +926,8 @@ function renderConversation() {
 function renderTranscripts() {
   const partial = state.snapshot?.partialTranscript || "";
   const pending = state.textDeal.pendingText || "";
-  setText(elements.partialTranscript, partial, "Waiting for transcript.");
-  setText(elements.pendingSegment, pending, "No unsent stable text.");
+  setText(elements.partialTranscript, partial, t("stage.awaitingTranscript"));
+  setText(elements.pendingSegment, pending, t("stage.noPendingStableText"));
 }
 
 function renderTranscriptEditor() {
@@ -685,8 +944,8 @@ function renderSessionList() {
   if (state.sessions.length === 0) {
     elements.sessionList.innerHTML = `
       <div class="session-item">
-        <strong>No sessions</strong>
-        <span>Create a session to begin.</span>
+        <strong>${escapeHTML(t("session.noneFound"))}</strong>
+        <span>${escapeHTML(t("session.createToBegin"))}</span>
       </div>
     `;
     return;
@@ -695,12 +954,12 @@ function renderSessionList() {
   elements.sessionList.innerHTML = state.sessions
     .map((session) => {
       const active = session.id === state.activeSessionId ? " active" : "";
-      const status = session.answering ? "answering" : session.listening ? "listening" : "idle";
+      const status = session.answering ? "answeringValue" : session.listening ? "listeningValue" : "idle";
       return `
         <button class="session-item${active}" data-session-id="${escapeHTML(session.id)}" type="button">
           <strong>${escapeHTML(session.title || session.id)}</strong>
-          <span>${escapeHTML(truncate(session.preview || "Awaiting input", 58))}</span>
-          <small>${escapeHTML(status)} - ${escapeHTML(session.id.slice(0, 8))}</small>
+          <span>${escapeHTML(truncate(session.preview || t("session.awaitingInput"), 58))}</span>
+          <small>${escapeHTML(t(`status.${status}`))} - ${escapeHTML(session.id.slice(0, 8))}</small>
         </button>
       `;
     })
@@ -714,24 +973,24 @@ function renderSessionList() {
 }
 
 function renderRuntime() {
-  elements.runtimeSttProvider.textContent = state.runtime.sttProvider || "unknown";
-  elements.runtimeLlmModel.textContent = state.runtime.llmModel || "unknown";
+  elements.runtimeSttProvider.textContent = localizeRuntimeValue(state.runtime.sttProvider);
+  elements.runtimeLlmModel.textContent = localizeRuntimeValue(state.runtime.llmModel);
 }
 
 function renderEmptyStage() {
   state.snapshot = null;
   state.textDeal = emptyTextDealState();
   state.transcriptCursorRaw = 0;
-  elements.activeSessionTitle.textContent = "No Active Session";
-  elements.activeSessionId.textContent = "none";
-  elements.listeningState.textContent = "false";
-  elements.answeringState.textContent = "false";
-  elements.audioStats.textContent = "0 chunks";
-  elements.conversation.innerHTML = systemMessageMarkup("Select a session from the left or create a new one.");
-  setText(elements.partialTranscript, "", "Waiting for transcript.");
-  setText(elements.pendingSegment, "", "No unsent stable text.");
+  elements.activeSessionTitle.textContent = t("stage.noActiveSession");
+  elements.activeSessionId.textContent = t("session.none");
+  elements.listeningState.textContent = t("status.false");
+  elements.answeringState.textContent = t("status.false");
+  elements.audioStats.textContent = formatAudioChunks(0);
+  elements.conversation.innerHTML = systemMessageMarkup(t("stage.createSessionHint"));
+  setText(elements.partialTranscript, "", t("stage.awaitingTranscript"));
+  setText(elements.pendingSegment, "", t("stage.noPendingStableText"));
   elements.transcriptEditor.value = "";
-  renderDockHint("Create a session to begin.");
+  renderDockHint(t("stage.createSessionHint"));
 }
 
 function renderSystemMessage(message) {
@@ -748,8 +1007,8 @@ function renderDockHint(text) {
 }
 
 function messageMarkup(role, text) {
-  const body = escapeHTML(text || (role === "assistant" ? "Waiting for answer." : ""));
-  const roleLabel = role === "user" ? "Question" : "Answer";
+  const body = escapeHTML(text || (role === "assistant" ? t("stage.waitingAnswer") : ""));
+  const roleLabel = role === "user" ? t("stage.question") : t("stage.answer");
   return `
     <div class="message-row ${role}">
       <article class="message-card">
@@ -764,7 +1023,7 @@ function systemMessageMarkup(text) {
   return `
     <div class="message-row system">
       <article class="message-card">
-        <span class="message-role">System</span>
+        <span class="message-role">${escapeHTML(t("stage.system"))}</span>
         ${escapeHTML(text)}
       </article>
     </div>
@@ -822,23 +1081,23 @@ function emptyTextDealState() {
 
 function buildSessionTitle(snapshot) {
   if (!snapshot) {
-    return "No Active Session";
+    return t("stage.noActiveSession");
   }
   if (snapshot.currentQuestion) {
     return truncate(snapshot.currentQuestion, 42);
   }
-  return `Session ${String(snapshot.id || "").slice(0, 8)}`;
+  return t("session.defaultTitle", { id: String(snapshot.id || "").slice(0, 8) });
 }
 
 function ensureActiveSession() {
   if (!state.activeSessionId) {
-    throw new Error("No active session. Create one first.");
+    throw new Error(t("error.noActiveSession"));
   }
 }
 
 function ensureCaptureAvailable() {
   if (state.capture) {
-    throw new Error("Audio capture is already running.");
+    throw new Error(t("error.captureRunning"));
   }
 }
 
@@ -851,7 +1110,7 @@ async function startAudioCapture(onSamples) {
   const audioTracks = stream.getAudioTracks();
   if (audioTracks.length === 0) {
     stream.getTracks().forEach((track) => track.stop());
-    throw new Error("No audio track is available from the selected source.");
+    throw new Error(t("error.noAudioTrack"));
   }
 
   const processingStream = new MediaStream([audioTracks[0]]);
@@ -859,7 +1118,7 @@ async function startAudioCapture(onSamples) {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) {
     stream.getTracks().forEach((track) => track.stop());
-    throw new Error("Web Audio API is not available in this browser");
+    throw new Error(t("error.noWebAudio"));
   }
 
   const audioContext = new AudioContextClass();
@@ -912,11 +1171,11 @@ async function requestMicrophoneStream() {
 
 async function requestSpeakerAudioStream() {
   if (!navigator.mediaDevices?.getDisplayMedia) {
-    throw new Error("This browser does not support speaker/system audio capture.");
+    throw new Error(t("error.noDisplayMedia"));
   }
 
   if (!isChromiumBrowser()) {
-    throw new Error("Speaker/system audio capture currently requires Chrome or Edge. Firefox and Safari usually do not expose a shareable system-audio track.");
+    throw new Error(t("error.speakerRequiresChromium"));
   }
 
   const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -931,7 +1190,7 @@ async function requestSpeakerAudioStream() {
 
   if (stream.getAudioTracks().length === 0) {
     stream.getTracks().forEach((track) => track.stop());
-    throw new Error("No shared audio track was provided. In the browser share dialog, select a tab/window/screen that supports audio and enable audio sharing.");
+    throw new Error(t("error.noSharedAudioTrack"));
   }
 
   return stream;
@@ -1004,6 +1263,11 @@ function persistSessions() {
   localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(state.sessions));
 }
 
+function persistPreferences() {
+  localStorage.setItem(LANGUAGE_STORAGE_KEY, state.preferences.language);
+  localStorage.setItem(THEME_STORAGE_KEY, state.preferences.theme);
+}
+
 function persistAudioSettings() {
   if (state.audio.selectedDeviceId) {
     localStorage.setItem(AUDIO_INPUT_STORAGE_KEY, state.audio.selectedDeviceId);
@@ -1012,6 +1276,135 @@ function persistAudioSettings() {
   }
 
   localStorage.setItem(CAPTURE_SOURCE_STORAGE_KEY, state.audio.captureSource);
+}
+
+function applyTheme() {
+  document.documentElement.dataset.theme = normalizeTheme(state.preferences.theme);
+}
+
+function renderTranslations() {
+  document.documentElement.lang = normalizeLanguage(state.preferences.language);
+  document.title = t("app.title");
+
+  for (const node of document.querySelectorAll("[data-i18n]")) {
+    const key = node.dataset.i18n;
+    node.textContent = t(key);
+  }
+
+  for (const node of document.querySelectorAll("[data-i18n-placeholder]")) {
+    const key = node.dataset.i18nPlaceholder;
+    node.setAttribute("placeholder", t(key));
+  }
+
+  relocalizeSessionMeta();
+  renderSettingsModal();
+  renderRuntime();
+  renderSessionList();
+
+  if (state.snapshot) {
+    renderSnapshotState();
+    renderConversation();
+    renderTranscripts();
+    renderTranscriptEditor();
+  } else {
+    renderEmptyStage();
+  }
+}
+
+function relocalizeSessionMeta() {
+  state.sessions = state.sessions.map((session) => ({
+    ...session,
+    title: relocalizeSessionTitle(session),
+    preview: relocalizeSessionPreview(session.preview),
+  }));
+  persistSessions();
+}
+
+function relocalizeSessionTitle(session) {
+  if (!session.title) {
+    return session.id;
+  }
+
+  const knownTitles = new Set(Object.values(translations).map((entry) => entry["session.newTitle"]));
+  if (knownTitles.has(session.title)) {
+    return t("session.newTitle");
+  }
+
+  const knownPrefixes = Object.values(translations).map((entry) => entry["session.defaultTitle"].split("{id}")[0]);
+  if (knownPrefixes.some((prefix) => prefix && session.title.startsWith(prefix))) {
+    return t("session.defaultTitle", { id: session.id.slice(0, 8) });
+  }
+
+  return session.title;
+}
+
+function relocalizeSessionPreview(preview) {
+  const knownReady = new Set(Object.values(translations).map((entry) => entry["session.readyToListen"]));
+  if (knownReady.has(preview)) {
+    return t("session.readyToListen");
+  }
+
+  const knownAwaiting = new Set(Object.values(translations).map((entry) => entry["session.awaitingInput"]));
+  if (knownAwaiting.has(preview)) {
+    return t("session.awaitingInput");
+  }
+
+  return preview;
+}
+
+function buildLanguageOptions() {
+  return [
+    { value: "zh-CN", label: "中文" },
+    { value: "en-US", label: "English" },
+  ]
+    .map((option) => `<option value="${option.value}">${escapeHTML(option.label)}</option>`)
+    .join("");
+}
+
+function buildThemeOptions() {
+  return [
+    { value: "system", label: t("settings.themeSystem") },
+    { value: "light", label: t("settings.themeLight") },
+    { value: "dark", label: t("settings.themeDark") },
+  ]
+    .map((option) => `<option value="${option.value}">${escapeHTML(option.label)}</option>`)
+    .join("");
+}
+
+function inferInitialLanguage() {
+  const browserLanguage = navigator.language || "en-US";
+  return browserLanguage.toLowerCase().startsWith("zh") ? "zh-CN" : "en-US";
+}
+
+function normalizeLanguage(language) {
+  return translations[language] ? language : "en-US";
+}
+
+function normalizeTheme(theme) {
+  return ["system", "light", "dark"].includes(theme) ? theme : "system";
+}
+
+function localizeRuntimeValue(value) {
+  if (!value || value === "unknown") {
+    return t("runtime.unknown");
+  }
+  if (value === "offline") {
+    return t("runtime.offline");
+  }
+  return value;
+}
+
+function formatAudioChunks(count) {
+  return t("runtime.audioChunks", { count: String(count) });
+}
+
+function t(key, vars = {}) {
+  const language = normalizeLanguage(state.preferences.language);
+  const catalog = translations[language] || translations["en-US"];
+  const fallback = translations["en-US"];
+  const template = catalog[key] ?? fallback[key] ?? key;
+
+  return template.replace(/\{(\w+)\}/g, (_, name) => String(vars[name] ?? `{${name}}`));
 }
 
 function loadStoredSessions() {
@@ -1076,7 +1469,10 @@ function parseJSON(raw, label) {
   try {
     return JSON.parse(raw);
   } catch (error) {
-    throw new Error(`Failed to parse ${label}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(t("error.failedToParse", {
+      label,
+      message: error instanceof Error ? error.message : String(error),
+    }));
   }
 }
 
