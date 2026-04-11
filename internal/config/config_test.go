@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestLoadDotEnvDoesNotOverrideExistingEnv(t *testing.T) {
+func TestLoadDotEnvOverridesExistingEnv(t *testing.T) {
 	t.Setenv("INTERVIEW_LLM_MODEL", "from-env")
 
 	dir := t.TempDir()
@@ -18,8 +18,9 @@ func TestLoadDotEnvDoesNotOverrideExistingEnv(t *testing.T) {
 
 	loadDotEnv(path)
 
-	if got := os.Getenv("INTERVIEW_LLM_MODEL"); got != "from-env" {
-		t.Fatalf("INTERVIEW_LLM_MODEL=%q, want from-env", got)
+	// .env always wins over existing environment variables.
+	if got := os.Getenv("INTERVIEW_LLM_MODEL"); got != "from-dotenv" {
+		t.Fatalf("INTERVIEW_LLM_MODEL=%q, want from-dotenv", got)
 	}
 	if got := os.Getenv("INTERVIEW_STT_PORT"); got != "7001" {
 		t.Fatalf("INTERVIEW_STT_PORT=%q, want 7001", got)
