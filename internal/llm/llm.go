@@ -54,8 +54,24 @@ func NewClient(cfg Config, logger *log.Logger) Client {
 		return &mockClient{}
 	case "openai-compatible", "openai_compatible":
 		return newOpenAICompatibleClient(cfg, logger)
+	case "openai":
+		return newOpenAIClient(cfg, logger)
 	case "groq":
 		return newGroqClient(cfg, logger)
+	case "anthropic", "claude":
+		return newAnthropicClient(cfg, logger)
+	case "deepseek":
+		return newDeepSeekClient(cfg, logger)
+	case "zhipu", "glm":
+		return newZhipuClient(cfg, logger)
+	case "qianwen", "dashscope", "tongyi":
+		return newQianwenClient(cfg, logger)
+	case "moonshot", "kimi":
+		return newMoonshotClient(cfg, logger)
+	case "gemini", "google":
+		return newGeminiClient(cfg, logger)
+	case "ollama":
+		return newOllamaClient(cfg, logger)
 	default:
 		return &mockClient{}
 	}

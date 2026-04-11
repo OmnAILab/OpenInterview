@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -102,8 +103,8 @@ func Load() Config {
 		LLM: LLMConfig{
 			Provider:     llmProvider,
 			BaseURL:      strings.TrimRight(envString("INTERVIEW_LLM_BASE_URL", defaultLLMBaseURL(llmProvider)), "/"),
-			Endpoint:     envString("INTERVIEW_LLM_ENDPOINT", "/chat/completions"),
-			APIKey:       envString("INTERVIEW_LLM_API_KEY", envString("GROQ_API_KEY", "")),
+			Endpoint:     envString("INTERVIEW_LLM_ENDPOINT", defaultLLMEndpoint(llmProvider)),
+			APIKey:       envString("INTERVIEW_LLM_API_KEY", defaultLLMAPIKey(llmProvider)),
 			Model:        envString("INTERVIEW_LLM_MODEL", "local-model"),
 			SystemPrompt: envString("INTERVIEW_LLM_SYSTEM_PROMPT", defaultSystemPrompt),
 			Temperature:  envFloat("INTERVIEW_LLM_TEMPERATURE", 0.2),
@@ -115,10 +116,74 @@ func Load() Config {
 const defaultSystemPrompt = "You are a local interview copilot. Help the candidate answer interview questions in a concise, credible, first-person style. Use the candidate profile and recent context, do not invent experience, and reply in the same language as the question."
 
 func defaultLLMBaseURL(provider string) string {
-	if provider == "groq" {
+	switch provider {
+	case "groq":
 		return "https://api.groq.com/openai/v1"
+	case "openai":
+		return "https://api.openai.com/v1"
+	case "anthropic", "claude":
+		return "https://api.anthropic.com"
+	case "deepseek":
+		return "https://api.deepseek.com/v1"
+	case "zhipu", "glm":
+		return "https://open.bigmodel.cn/api/paas/v4"
+	case "qianwen", "dashscope", "tongyi":
+		return "https://dashscope.aliyuncs.com/compatible-mode/v1"
+	case "moonshot", "kimi":
+		return "https://api.moonshot.cn/v1"
+	case "gemini", "google":
+		return "https://generativelanguage.googleapis.com/v1beta/openai"
+	case "ollama":
+		return "http://127.0.0.1:11434/v1"
+	default:
+		return "http://127.0.0.1:1234/v1"
 	}
-	return "http://127.0.0.1:1234/v1"
+}
+
+// defaultSTTWSURL returns the default WebSocket URL for a locally-running STT server
+// listening on the given port.
+func defaultSTTWSURL(port int) string {
+	return fmt.Sprintf("ws://127.0.0.1:%d/", port)
+}
+
+// defaultLLMEndpoint returns the default chat-completion endpoint path for a provider.
+// Anthropic uses a different path; all others follow the OpenAI convention.
+func defaultLLMEndpoint(provider string) string {
+	if provider == "anthropic" || provider == "claude" {
+		return "/v1/messages"
+	}
+	return "/chat/completions"
+}
+
+// defaultLLMAPIKey looks for well-known provider-specific environment variables as
+// a convenience so users do not have to set INTERVIEW_LLM_API_KEY when they already
+// have a standard key variable exported in their shell.
+func defaultLLMAPIKey(provider string) string {
+	candidates := []string{"INTERVIEW_LLM_API_KEY"}
+	switch provider {
+	case "groq":
+		candidates = append(candidates, "GROQ_API_KEY")
+	case "openai":
+		candidates = append(candidates, "OPENAI_API_KEY")
+	case "anthropic", "claude":
+		candidates = append(candidates, "ANTHROPIC_API_KEY")
+	case "deepseek":
+		candidates = append(candidates, "DEEPSEEK_API_KEY")
+	case "zhipu", "glm":
+		candidates = append(candidates, "ZHIPU_API_KEY")
+	case "qianwen", "dashscope", "tongyi":
+		candidates = append(candidates, "DASHSCOPE_API_KEY")
+	case "moonshot", "kimi":
+		candidates = append(candidates, "MOONSHOT_API_KEY")
+	case "gemini", "google":
+		candidates = append(candidates, "GEMINI_API_KEY")
+	}
+	for _, key := range candidates {
+		if v := os.Getenv(key); strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func loadDotEnv(path string) {
