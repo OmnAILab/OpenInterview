@@ -102,10 +102,10 @@ func Load() Config {
 		},
 		LLM: LLMConfig{
 			Provider:     llmProvider,
-			BaseURL:      strings.TrimRight(envString("INTERVIEW_LLM_BASE_URL", defaultLLMBaseURL(llmProvider)), "/"),
+			BaseURL:      strings.TrimRight(defaultLLMResolvedBaseURL(llmProvider), "/"),
 			Endpoint:     envString("INTERVIEW_LLM_ENDPOINT", defaultLLMEndpoint(llmProvider)),
-			APIKey:       envString("INTERVIEW_LLM_API_KEY", defaultLLMAPIKey(llmProvider)),
-			Model:        envString("INTERVIEW_LLM_MODEL", "local-model"),
+			APIKey:       defaultLLMAPIKey(llmProvider),
+			Model:        defaultLLMModel(llmProvider),
 			SystemPrompt: envString("INTERVIEW_LLM_SYSTEM_PROMPT", defaultSystemPrompt),
 			Temperature:  envFloat("INTERVIEW_LLM_TEMPERATURE", 0.2),
 			Timeout:      envDuration("INTERVIEW_LLM_TIMEOUT", 90*time.Second),
@@ -140,6 +140,83 @@ func defaultLLMBaseURL(provider string) string {
 	}
 }
 
+// defaultLLMResolvedBaseURL resolves the base URL for the given provider.
+// Lookup order: INTERVIEW_LLM_BASE_URL → {PREFIX}_BASE_URL → hardcoded default.
+func defaultLLMResolvedBaseURL(provider string) string {
+	if v := os.Getenv("INTERVIEW_LLM_BASE_URL"); strings.TrimSpace(v) != "" {
+		return v
+	}
+	if prefix := providerEnvPrefix(provider); prefix != "" {
+		if v := os.Getenv(prefix + "_BASE_URL"); strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return defaultLLMBaseURL(provider)
+}
+
+// providerEnvPrefix returns the uppercase environment variable prefix for a provider.
+// For example, "groq" → "GROQ", "anthropic" → "ANTHROPIC".
+// Returns an empty string for providers without a standard prefix.
+func providerEnvPrefix(provider string) string {
+	switch provider {
+	case "groq":
+		return "GROQ"
+	case "openai":
+		return "OPENAI"
+	case "anthropic", "claude":
+		return "ANTHROPIC"
+	case "deepseek":
+		return "DEEPSEEK"
+	case "zhipu", "glm":
+		return "ZHIPU"
+	case "qianwen", "dashscope", "tongyi":
+		return "DASHSCOPE"
+	case "moonshot", "kimi":
+		return "MOONSHOT"
+	case "gemini", "google":
+		return "GEMINI"
+	case "ollama":
+		return "OLLAMA"
+	default:
+		return ""
+	}
+}
+
+// defaultLLMModel resolves the model name for the given provider.
+// Lookup order: {PREFIX}_MODEL → INTERVIEW_LLM_MODEL → hardcoded default.
+func defaultLLMModel(provider string) string {
+	if prefix := providerEnvPrefix(provider); prefix != "" {
+		if v := os.Getenv(prefix + "_MODEL"); strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	if v := os.Getenv("INTERVIEW_LLM_MODEL"); strings.TrimSpace(v) != "" {
+		return v
+	}
+	switch provider {
+	case "groq":
+		return "llama-3.3-70b-versatile"
+	case "openai":
+		return "gpt-4o"
+	case "anthropic", "claude":
+		return "claude-opus-4-5"
+	case "deepseek":
+		return "deepseek-chat"
+	case "zhipu", "glm":
+		return "glm-4-flash"
+	case "qianwen", "dashscope", "tongyi":
+		return "qwen-max"
+	case "moonshot", "kimi":
+		return "moonshot-v1-8k"
+	case "gemini", "google":
+		return "gemini-2.0-flash"
+	case "ollama":
+		return "qwen2.5:7b"
+	default:
+		return "local-model"
+	}
+}
+
 // defaultSTTWSURL returns the default WebSocket URL for a locally-running STT server
 // listening on the given port.
 func defaultSTTWSURL(port int) string {
@@ -155,29 +232,14 @@ func defaultLLMEndpoint(provider string) string {
 	return "/chat/completions"
 }
 
-// defaultLLMAPIKey looks for well-known provider-specific environment variables as
-// a convenience so users do not have to set INTERVIEW_LLM_API_KEY when they already
-// have a standard key variable exported in their shell.
+// defaultLLMAPIKey resolves the API key for the given provider.
+// Lookup order: {PREFIX}_API_KEY → INTERVIEW_LLM_API_KEY.
 func defaultLLMAPIKey(provider string) string {
-	candidates := []string{"INTERVIEW_LLM_API_KEY"}
-	switch provider {
-	case "groq":
-		candidates = append(candidates, "GROQ_API_KEY")
-	case "openai":
-		candidates = append(candidates, "OPENAI_API_KEY")
-	case "anthropic", "claude":
-		candidates = append(candidates, "ANTHROPIC_API_KEY")
-	case "deepseek":
-		candidates = append(candidates, "DEEPSEEK_API_KEY")
-	case "zhipu", "glm":
-		candidates = append(candidates, "ZHIPU_API_KEY")
-	case "qianwen", "dashscope", "tongyi":
-		candidates = append(candidates, "DASHSCOPE_API_KEY")
-	case "moonshot", "kimi":
-		candidates = append(candidates, "MOONSHOT_API_KEY")
-	case "gemini", "google":
-		candidates = append(candidates, "GEMINI_API_KEY")
+	var candidates []string
+	if prefix := providerEnvPrefix(provider); prefix != "" {
+		candidates = append(candidates, prefix+"_API_KEY")
 	}
+	candidates = append(candidates, "INTERVIEW_LLM_API_KEY")
 	for _, key := range candidates {
 		if v := os.Getenv(key); strings.TrimSpace(v) != "" {
 			return v
