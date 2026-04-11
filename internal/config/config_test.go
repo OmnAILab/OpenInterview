@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestLoadDotEnvDoesNotOverrideExistingEnv(t *testing.T) {
+func TestLoadDotEnvOverridesExistingEnv(t *testing.T) {
 	t.Setenv("INTERVIEW_LLM_MODEL", "from-env")
 
 	dir := t.TempDir()
@@ -18,8 +18,9 @@ func TestLoadDotEnvDoesNotOverrideExistingEnv(t *testing.T) {
 
 	loadDotEnv(path)
 
-	if got := os.Getenv("INTERVIEW_LLM_MODEL"); got != "from-env" {
-		t.Fatalf("INTERVIEW_LLM_MODEL=%q, want from-env", got)
+	// .env always wins over existing environment variables.
+	if got := os.Getenv("INTERVIEW_LLM_MODEL"); got != "from-dotenv" {
+		t.Fatalf("INTERVIEW_LLM_MODEL=%q, want from-dotenv", got)
 	}
 	if got := os.Getenv("INTERVIEW_STT_PORT"); got != "7001" {
 		t.Fatalf("INTERVIEW_STT_PORT=%q, want 7001", got)
@@ -61,5 +62,32 @@ func TestDefaultURLs(t *testing.T) {
 	}
 	if got := defaultLLMBaseURL("mock"); got != "http://127.0.0.1:1234/v1" {
 		t.Fatalf("defaultLLMBaseURL(mock) = %q", got)
+	}
+	if got := defaultLLMBaseURL("openai"); got != "https://api.openai.com/v1" {
+		t.Fatalf("defaultLLMBaseURL(openai) = %q", got)
+	}
+	if got := defaultLLMBaseURL("anthropic"); got != "https://api.anthropic.com" {
+		t.Fatalf("defaultLLMBaseURL(anthropic) = %q", got)
+	}
+	if got := defaultLLMBaseURL("deepseek"); got != "https://api.deepseek.com/v1" {
+		t.Fatalf("defaultLLMBaseURL(deepseek) = %q", got)
+	}
+	if got := defaultLLMBaseURL("ollama"); got != "http://127.0.0.1:11434/v1" {
+		t.Fatalf("defaultLLMBaseURL(ollama) = %q", got)
+	}
+}
+
+func TestDefaultLLMEndpoint(t *testing.T) {
+	if got := defaultLLMEndpoint("anthropic"); got != "/v1/messages" {
+		t.Fatalf("defaultLLMEndpoint(anthropic) = %q", got)
+	}
+	if got := defaultLLMEndpoint("claude"); got != "/v1/messages" {
+		t.Fatalf("defaultLLMEndpoint(claude) = %q", got)
+	}
+	if got := defaultLLMEndpoint("openai"); got != "/chat/completions" {
+		t.Fatalf("defaultLLMEndpoint(openai) = %q", got)
+	}
+	if got := defaultLLMEndpoint("groq"); got != "/chat/completions" {
+		t.Fatalf("defaultLLMEndpoint(groq) = %q", got)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -101,10 +102,10 @@ func Load() Config {
 		},
 		LLM: LLMConfig{
 			Provider:     llmProvider,
-			BaseURL:      strings.TrimRight(envString("INTERVIEW_LLM_BASE_URL", defaultLLMBaseURL(llmProvider)), "/"),
-			Endpoint:     envString("INTERVIEW_LLM_ENDPOINT", "/chat/completions"),
-			APIKey:       envString("INTERVIEW_LLM_API_KEY", envString("GROQ_API_KEY", "")),
-			Model:        envString("INTERVIEW_LLM_MODEL", "local-model"),
+			BaseURL:      strings.TrimRight(defaultLLMResolvedBaseURL(llmProvider), "/"),
+			Endpoint:     envString("INTERVIEW_LLM_ENDPOINT", defaultLLMEndpoint(llmProvider)),
+			APIKey:       defaultLLMAPIKey(llmProvider),
+			Model:        defaultLLMModel(llmProvider),
 			SystemPrompt: envString("INTERVIEW_LLM_SYSTEM_PROMPT", defaultSystemPrompt),
 			Temperature:  envFloat("INTERVIEW_LLM_TEMPERATURE", 0.2),
 			Timeout:      envDuration("INTERVIEW_LLM_TIMEOUT", 90*time.Second),
@@ -115,10 +116,136 @@ func Load() Config {
 const defaultSystemPrompt = "You are a local interview copilot. Help the candidate answer interview questions in a concise, credible, first-person style. Use the candidate profile and recent context, do not invent experience, and reply in the same language as the question."
 
 func defaultLLMBaseURL(provider string) string {
-	if provider == "groq" {
+	switch provider {
+	case "groq":
 		return "https://api.groq.com/openai/v1"
+	case "openai":
+		return "https://api.openai.com/v1"
+	case "anthropic", "claude":
+		return "https://api.anthropic.com"
+	case "deepseek":
+		return "https://api.deepseek.com/v1"
+	case "zhipu", "glm":
+		return "https://open.bigmodel.cn/api/paas/v4"
+	case "qianwen", "dashscope", "tongyi":
+		return "https://dashscope.aliyuncs.com/compatible-mode/v1"
+	case "moonshot", "kimi":
+		return "https://api.moonshot.cn/v1"
+	case "gemini", "google":
+		return "https://generativelanguage.googleapis.com/v1beta/openai"
+	case "ollama":
+		return "http://127.0.0.1:11434/v1"
+	default:
+		return "http://127.0.0.1:1234/v1"
 	}
-	return "http://127.0.0.1:1234/v1"
+}
+
+// defaultLLMResolvedBaseURL resolves the base URL for the given provider.
+// Lookup order: INTERVIEW_LLM_BASE_URL → {PREFIX}_BASE_URL → hardcoded default.
+func defaultLLMResolvedBaseURL(provider string) string {
+	if v := os.Getenv("INTERVIEW_LLM_BASE_URL"); strings.TrimSpace(v) != "" {
+		return v
+	}
+	if prefix := providerEnvPrefix(provider); prefix != "" {
+		if v := os.Getenv(prefix + "_BASE_URL"); strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return defaultLLMBaseURL(provider)
+}
+
+// providerEnvPrefix returns the uppercase environment variable prefix for a provider.
+// For example, "groq" → "GROQ", "anthropic" → "ANTHROPIC".
+// Returns an empty string for providers without a standard prefix.
+func providerEnvPrefix(provider string) string {
+	switch provider {
+	case "groq":
+		return "GROQ"
+	case "openai":
+		return "OPENAI"
+	case "anthropic", "claude":
+		return "ANTHROPIC"
+	case "deepseek":
+		return "DEEPSEEK"
+	case "zhipu", "glm":
+		return "ZHIPU"
+	case "qianwen", "dashscope", "tongyi":
+		return "DASHSCOPE"
+	case "moonshot", "kimi":
+		return "MOONSHOT"
+	case "gemini", "google":
+		return "GEMINI"
+	case "ollama":
+		return "OLLAMA"
+	default:
+		return ""
+	}
+}
+
+// defaultLLMModel resolves the model name for the given provider.
+// Lookup order: {PREFIX}_MODEL → INTERVIEW_LLM_MODEL → hardcoded default.
+func defaultLLMModel(provider string) string {
+	if prefix := providerEnvPrefix(provider); prefix != "" {
+		if v := os.Getenv(prefix + "_MODEL"); strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	if v := os.Getenv("INTERVIEW_LLM_MODEL"); strings.TrimSpace(v) != "" {
+		return v
+	}
+	switch provider {
+	case "groq":
+		return "llama-3.3-70b-versatile"
+	case "openai":
+		return "gpt-4o"
+	case "anthropic", "claude":
+		return "claude-opus-4-5"
+	case "deepseek":
+		return "deepseek-chat"
+	case "zhipu", "glm":
+		return "glm-4-flash"
+	case "qianwen", "dashscope", "tongyi":
+		return "qwen-max"
+	case "moonshot", "kimi":
+		return "moonshot-v1-8k"
+	case "gemini", "google":
+		return "gemini-2.0-flash"
+	case "ollama":
+		return "qwen2.5:7b"
+	default:
+		return "local-model"
+	}
+}
+
+// defaultSTTWSURL returns the default WebSocket URL for a locally-running STT server
+// listening on the given port.
+func defaultSTTWSURL(port int) string {
+	return fmt.Sprintf("ws://127.0.0.1:%d/", port)
+}
+
+// defaultLLMEndpoint returns the default chat-completion endpoint path for a provider.
+// Anthropic uses a different path; all others follow the OpenAI convention.
+func defaultLLMEndpoint(provider string) string {
+	if provider == "anthropic" || provider == "claude" {
+		return "/v1/messages"
+	}
+	return "/chat/completions"
+}
+
+// defaultLLMAPIKey resolves the API key for the given provider.
+// Lookup order: {PREFIX}_API_KEY → INTERVIEW_LLM_API_KEY.
+func defaultLLMAPIKey(provider string) string {
+	var candidates []string
+	if prefix := providerEnvPrefix(provider); prefix != "" {
+		candidates = append(candidates, prefix+"_API_KEY")
+	}
+	candidates = append(candidates, "INTERVIEW_LLM_API_KEY")
+	for _, key := range candidates {
+		if v := os.Getenv(key); strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func loadDotEnv(path string) {
