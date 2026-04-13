@@ -4,6 +4,7 @@ const AUDIO_INPUT_STORAGE_KEY = "openinterview.frontend.audioInputId";
 const CAPTURE_SOURCE_STORAGE_KEY = "openinterview.frontend.captureSource";
 const LANGUAGE_STORAGE_KEY = "openinterview.frontend.language";
 const THEME_STORAGE_KEY = "openinterview.frontend.theme";
+const MARKDOWN_STORAGE_KEY = "openinterview.frontend.markdownEnabled";
 
 const translations = {
   "zh-CN": {
@@ -66,6 +67,10 @@ const translations = {
     "settings.themeSystem": "跟随系统",
     "settings.themeLight": "浅色",
     "settings.themeDark": "深色",
+    "settings.markdownEyebrow": "Markdown",
+    "settings.markdownTitle": "消息渲染",
+    "settings.markdownEnabled": "启用 Markdown",
+    "settings.markdownDesc": "用标题、列表、代码块和链接来渲染消息内容。",
     "settings.sourceEyebrow": "音频来源",
     "settings.sourceTitle": "选择采集对象",
     "settings.microphoneTitle": "麦克风",
@@ -170,6 +175,10 @@ const translations = {
     "settings.themeSystem": "System",
     "settings.themeLight": "Light",
     "settings.themeDark": "Dark",
+    "settings.markdownEyebrow": "Markdown",
+    "settings.markdownTitle": "Message Rendering",
+    "settings.markdownEnabled": "Enable Markdown",
+    "settings.markdownDesc": "Render message content with headings, lists, code blocks, and links.",
     "settings.sourceEyebrow": "Source",
     "settings.sourceTitle": "Choose What To Capture",
     "settings.microphoneTitle": "Microphone",
@@ -240,6 +249,7 @@ const elements = {
   audioDeviceHint: document.getElementById("audioDeviceHint"),
   languageSelect: document.getElementById("languageSelect"),
   themeSelect: document.getElementById("themeSelect"),
+  markdownEnabledToggle: document.getElementById("markdownEnabledToggle"),
   deleteSessionBtn: document.getElementById("deleteSessionBtn"),
   activeSessionTitle: document.getElementById("activeSessionTitle"),
   activeSessionId: document.getElementById("activeSessionId"),
@@ -263,8 +273,10 @@ const state = {
   preferences: {
     language: localStorage.getItem(LANGUAGE_STORAGE_KEY) || inferInitialLanguage(),
     theme: localStorage.getItem(THEME_STORAGE_KEY) || "system",
+    markdownEnabled: localStorage.getItem(MARKDOWN_STORAGE_KEY) !== "false",
     draftLanguage: "",
     draftTheme: "system",
+    draftMarkdownEnabled: true,
   },
   audio: {
     devices: [],
@@ -320,6 +332,7 @@ function bindActions() {
   elements.audioInputSelect.addEventListener("change", handleAudioDeviceDraftChange);
   elements.languageSelect.addEventListener("change", handleLanguageDraftChange);
   elements.themeSelect.addEventListener("change", handleThemeDraftChange);
+  elements.markdownEnabledToggle.addEventListener("change", handleMarkdownDraftChange);
   elements.refreshAudioDevicesBtn.addEventListener("click", () => runAction(() => refreshAudioDevices({ requestPermission: true })));
   elements.deleteSessionBtn.addEventListener("click", () => runAction(deleteActiveSession));
   elements.dockStartBtn?.addEventListener("click", () => runAction(startListening));
@@ -343,6 +356,7 @@ function initializePreferences() {
 
   state.preferences.draftLanguage = state.preferences.language;
   state.preferences.draftTheme = state.preferences.theme;
+  state.preferences.draftMarkdownEnabled = state.preferences.markdownEnabled;
 
   applyTheme();
   renderTranslations();
@@ -399,6 +413,7 @@ async function openSettingsModal() {
   state.audio.draftDeviceId = state.audio.selectedDeviceId;
   state.preferences.draftLanguage = state.preferences.language;
   state.preferences.draftTheme = state.preferences.theme;
+  state.preferences.draftMarkdownEnabled = state.preferences.markdownEnabled;
   renderSettingsModal();
   await refreshAudioDevices({ requestPermission: false });
 }
@@ -431,9 +446,14 @@ function handleThemeDraftChange() {
   state.preferences.draftTheme = elements.themeSelect.value;
 }
 
+function handleMarkdownDraftChange() {
+  state.preferences.draftMarkdownEnabled = elements.markdownEnabledToggle.checked;
+}
+
 async function saveAudioSettings() {
   state.preferences.language = normalizeLanguage(elements.languageSelect.value || state.preferences.draftLanguage);
   state.preferences.theme = normalizeTheme(elements.themeSelect.value || state.preferences.draftTheme);
+  state.preferences.markdownEnabled = Boolean(state.preferences.draftMarkdownEnabled);
   persistPreferences();
   applyTheme();
   renderTranslations();
@@ -520,6 +540,7 @@ function renderSettingsModal(message) {
   elements.themeSelect.innerHTML = buildThemeOptions();
   elements.languageSelect.value = normalizeLanguage(state.preferences.draftLanguage);
   elements.themeSelect.value = normalizeTheme(state.preferences.draftTheme);
+  elements.markdownEnabledToggle.checked = Boolean(state.preferences.draftMarkdownEnabled);
 
   const options = state.audio.devices.length > 0
     ? state.audio.devices
@@ -1007,13 +1028,13 @@ function renderDockHint(text) {
 }
 
 function messageMarkup(role, text) {
-  const body = escapeHTML(text || (role === "assistant" ? t("stage.waitingAnswer") : ""));
+  const body = renderMessageBody(text || (role === "assistant" ? t("stage.waitingAnswer") : ""), role);
   const roleLabel = role === "user" ? t("stage.question") : t("stage.answer");
   return `
     <div class="message-row ${role}">
       <article class="message-card">
         <span class="message-role">${roleLabel}</span>
-        ${body}
+        <div class="message-body">${body}</div>
       </article>
     </div>
   `;
@@ -1024,7 +1045,7 @@ function systemMessageMarkup(text) {
     <div class="message-row system">
       <article class="message-card">
         <span class="message-role">${escapeHTML(t("stage.system"))}</span>
-        ${escapeHTML(text)}
+        <div class="message-body">${renderPlainText(text)}</div>
       </article>
     </div>
   `;
@@ -1266,6 +1287,7 @@ function persistSessions() {
 function persistPreferences() {
   localStorage.setItem(LANGUAGE_STORAGE_KEY, state.preferences.language);
   localStorage.setItem(THEME_STORAGE_KEY, state.preferences.theme);
+  localStorage.setItem(MARKDOWN_STORAGE_KEY, String(state.preferences.markdownEnabled));
 }
 
 function persistAudioSettings() {
@@ -1405,6 +1427,405 @@ function t(key, vars = {}) {
   const template = catalog[key] ?? fallback[key] ?? key;
 
   return template.replace(/\{(\w+)\}/g, (_, name) => String(vars[name] ?? `{${name}}`));
+}
+
+function renderMessageBody(text, role) {
+  if (!text) {
+    return "";
+  }
+
+  const shouldUseMarkdown = state.preferences.markdownEnabled && (role === "assistant" || role === "user");
+  return shouldUseMarkdown ? renderMarkdown(text) : renderPlainText(text);
+}
+
+function renderPlainText(text) {
+  return escapeHTML(text).replace(/\n/g, "<br>");
+}
+
+function renderMarkdown(text) {
+  const normalized = String(text || "").replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  const blocks = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+    const trimmed = line.trim();
+
+    if (trimmed === "") {
+      index += 1;
+      continue;
+    }
+
+    if (/^```/.test(trimmed)) {
+      const language = trimmed.slice(3).trim();
+      const codeLines = [];
+      index += 1;
+      while (index < lines.length && !/^```/.test(lines[index].trim())) {
+        codeLines.push(lines[index]);
+        index += 1;
+      }
+      if (index < lines.length) {
+        index += 1;
+      }
+      const languageClass = language ? ` class="language-${escapeHTML(language)}"` : "";
+      blocks.push(`<pre><code${languageClass}>${escapeHTML(codeLines.join("\n"))}</code></pre>`);
+      continue;
+    }
+
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      blocks.push(`<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`);
+      index += 1;
+      continue;
+    }
+
+    if (/^---+$|^\*\*\*+$|^___+$/.test(trimmed)) {
+      blocks.push("<hr>");
+      index += 1;
+      continue;
+    }
+
+    if (isMarkdownTableStart(lines, index)) {
+      const table = parseMarkdownTable(lines, index);
+      blocks.push(table.html);
+      index = table.nextIndex;
+      continue;
+    }
+
+    if (/^>\s?/.test(trimmed)) {
+      const quoteLines = [];
+      while (index < lines.length && /^>\s?/.test(lines[index].trim())) {
+        quoteLines.push(lines[index].trim().replace(/^>\s?/, ""));
+        index += 1;
+      }
+      blocks.push(`<blockquote>${quoteLines.map((quoteLine) => renderPlainText(quoteLine)).join("<br>")}</blockquote>`);
+      continue;
+    }
+
+    if (parseListMarker(line)) {
+      const list = parseMarkdownList(lines, index, getIndent(line));
+      blocks.push(list.html);
+      index = list.nextIndex;
+      continue;
+    }
+
+    const paragraphLines = [];
+    while (index < lines.length) {
+      const current = lines[index];
+      const currentTrimmed = current.trim();
+      if (
+        currentTrimmed === "" ||
+        /^```/.test(currentTrimmed) ||
+        isMarkdownTableStart(lines, index) ||
+        /^(#{1,6})\s+/.test(current) ||
+        /^>\s?/.test(currentTrimmed) ||
+        parseListMarker(current) ||
+        /^---+$|^\*\*\*+$|^___+$/.test(currentTrimmed)
+      ) {
+        break;
+      }
+      paragraphLines.push(current);
+      index += 1;
+    }
+    blocks.push(`<p>${paragraphLines.map((paragraphLine) => renderInlineMarkdown(paragraphLine)).join("<br>")}</p>`);
+  }
+
+  return blocks.join("");
+}
+
+function parseMarkdownList(lines, startIndex, baseIndent) {
+  const firstMarker = parseListMarker(lines[startIndex]);
+  const ordered = firstMarker?.ordered || false;
+  const tag = ordered ? "ol" : "ul";
+  const items = [];
+  let index = startIndex;
+
+  while (index < lines.length) {
+    const line = lines[index];
+    const marker = parseListMarker(line);
+    const indent = getIndent(line);
+
+    if (!marker || indent !== baseIndent || marker.ordered !== ordered) {
+      break;
+    }
+
+    const itemLines = [marker.content];
+    index += 1;
+
+    while (index < lines.length) {
+      const nextLine = lines[index];
+      const nextTrimmed = nextLine.trim();
+      const nextMarker = parseListMarker(nextLine);
+      const nextIndent = getIndent(nextLine);
+
+      if (nextTrimmed === "") {
+        itemLines.push("");
+        index += 1;
+        continue;
+      }
+
+      if (nextMarker && nextIndent === baseIndent) {
+        break;
+      }
+
+      if (nextIndent > baseIndent) {
+        itemLines.push(nextLine.slice(Math.min(nextLine.length, baseIndent + 2)));
+        index += 1;
+        continue;
+      }
+
+      break;
+    }
+
+    items.push(renderMarkdownListItem(itemLines));
+  }
+
+  return {
+    html: `<${tag}>${items.join("")}</${tag}>`,
+    nextIndex: index,
+  };
+}
+
+function renderMarkdownListItem(lines) {
+  const cleanLines = trimBlankEdges(lines);
+  if (cleanLines.length === 0) {
+    return "<li></li>";
+  }
+
+  const task = parseTaskMarker(cleanLines[0]);
+  if (task) {
+    cleanLines[0] = task.content;
+  }
+
+  let index = 0;
+  const parts = [];
+  const paragraphLines = [];
+
+  while (index < cleanLines.length) {
+    const line = cleanLines[index];
+    const trimmed = line.trim();
+
+    if (trimmed === "") {
+      if (paragraphLines.length > 0) {
+        parts.push(renderListParagraph(paragraphLines));
+        paragraphLines.length = 0;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (parseListMarker(line)) {
+      if (paragraphLines.length > 0) {
+        parts.push(renderListParagraph(paragraphLines));
+        paragraphLines.length = 0;
+      }
+      const nested = parseMarkdownList(cleanLines, index, getIndent(line));
+      parts.push(nested.html);
+      index = nested.nextIndex;
+      continue;
+    }
+
+    paragraphLines.push(line);
+    index += 1;
+  }
+
+  if (paragraphLines.length > 0) {
+    parts.push(renderListParagraph(paragraphLines));
+  }
+
+  const taskCheckbox = task
+    ? `<input class="task-list-checkbox" type="checkbox" disabled${task.checked ? " checked" : ""}>`
+    : "";
+  const taskClass = task ? " class=\"task-list-item\"" : "";
+  return `<li${taskClass}>${taskCheckbox}${parts.join("")}</li>`;
+}
+
+function renderListParagraph(lines) {
+  return lines.map((line) => renderInlineMarkdown(line.trim())).join("<br>");
+}
+
+function parseListMarker(line) {
+  const match = String(line || "").match(/^(\s*)([-*+]|\d+\.)\s+(.*)$/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    indent: match[1].length,
+    ordered: /\d+\./.test(match[2]),
+    content: match[3],
+  };
+}
+
+function parseTaskMarker(text) {
+  const match = String(text || "").match(/^\s*\[([ xX])\]\s+(.*)$/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    checked: match[1].toLowerCase() === "x",
+    content: match[2],
+  };
+}
+
+function getIndent(line) {
+  const match = String(line || "").match(/^\s*/);
+  return match ? match[0].replace(/\t/g, "    ").length : 0;
+}
+
+function trimBlankEdges(lines) {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && String(lines[start]).trim() === "") {
+    start += 1;
+  }
+  while (end > start && String(lines[end - 1]).trim() === "") {
+    end -= 1;
+  }
+  return lines.slice(start, end);
+}
+
+function isMarkdownTableStart(lines, index) {
+  if (index + 1 >= lines.length) {
+    return false;
+  }
+
+  const header = lines[index].trim();
+  const separator = lines[index + 1].trim();
+  return header.includes("|") && isMarkdownTableSeparator(separator);
+}
+
+function isMarkdownTableSeparator(line) {
+  if (!line.includes("|")) {
+    return false;
+  }
+
+  const cells = splitMarkdownTableRow(line);
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell.trim()));
+}
+
+function parseMarkdownTable(lines, startIndex) {
+  const headers = splitMarkdownTableRow(lines[startIndex]);
+  const alignments = splitMarkdownTableRow(lines[startIndex + 1]).map(parseTableAlignment);
+  const rows = [];
+  let index = startIndex + 2;
+
+  while (index < lines.length && lines[index].trim().includes("|") && lines[index].trim() !== "") {
+    if (isMarkdownTableSeparator(lines[index].trim())) {
+      break;
+    }
+    rows.push(splitMarkdownTableRow(lines[index]));
+    index += 1;
+  }
+
+  const headerHTML = headers
+    .map((header, cellIndex) => renderTableCell("th", header, alignments[cellIndex]))
+    .join("");
+  const bodyHTML = rows
+    .map((row) => {
+      const cells = headers.map((_, cellIndex) => row[cellIndex] || "");
+      return `<tr>${cells.map((cell, cellIndex) => renderTableCell("td", cell, alignments[cellIndex])).join("")}</tr>`;
+    })
+    .join("");
+
+  return {
+    html: `<div class="table-wrap"><table><thead><tr>${headerHTML}</tr></thead><tbody>${bodyHTML}</tbody></table></div>`,
+    nextIndex: index,
+  };
+}
+
+function splitMarkdownTableRow(line) {
+  let value = String(line || "").trim();
+  if (value.startsWith("|")) {
+    value = value.slice(1);
+  }
+  if (value.endsWith("|")) {
+    value = value.slice(0, -1);
+  }
+
+  const cells = [];
+  let current = "";
+  let escaped = false;
+  for (const char of value) {
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === "|") {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function parseTableAlignment(separatorCell) {
+  const cell = String(separatorCell || "").trim();
+  if (cell.startsWith(":") && cell.endsWith(":")) {
+    return "center";
+  }
+  if (cell.endsWith(":")) {
+    return "right";
+  }
+  if (cell.startsWith(":")) {
+    return "left";
+  }
+  return "";
+}
+
+function renderTableCell(tag, content, alignment) {
+  const align = alignment ? ` style="text-align:${alignment}"` : "";
+  return `<${tag}${align}>${renderInlineMarkdown(content)}</${tag}>`;
+}
+
+function renderInlineMarkdown(text) {
+  const codeSpans = [];
+  let html = escapeHTML(String(text || "")).replace(/`([^`]+)`/g, (_, code) => {
+    const token = `@@CODE${codeSpans.length}@@`;
+    codeSpans.push(`<code>${code}</code>`);
+    return token;
+  });
+
+  html = html.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, url) => {
+    const safeURL = sanitizeURL(url);
+    if (!safeURL) {
+      return label;
+    }
+    return `<a href="${safeURL}" target="_blank" rel="noreferrer">${label}</a>`;
+  });
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/(^|[\s(])\*([^*]+)\*(?=[\s).,!?:;]|$)/g, "$1<em>$2</em>");
+  html = html.replace(/~~([^~]+)~~/g, "<del>$1</del>");
+
+  for (let index = 0; index < codeSpans.length; index += 1) {
+    html = html.replace(`@@CODE${index}@@`, codeSpans[index]);
+  }
+
+  return html;
+}
+
+function sanitizeURL(url) {
+  try {
+    const parsed = new URL(url, window.location.origin);
+    if (["http:", "https:", "mailto:"].includes(parsed.protocol)) {
+      return escapeHTML(parsed.href);
+    }
+  } catch {
+    return "";
+  }
+
+  return "";
 }
 
 function loadStoredSessions() {
