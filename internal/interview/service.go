@@ -150,6 +150,14 @@ func (s *Service) SubmitTextSegment(sessionID string, stop int) (Snapshot, error
 	return session.SubmitTextSegment(stop)
 }
 
+func (s *Service) AddTextStopMarker(sessionID string, stop int) (Snapshot, error) {
+	session, err := s.session(sessionID)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	return session.AddTextStopMarker(stop)
+}
+
 func (s *Service) Reset(ctx context.Context, sessionID string) (Snapshot, error) {
 	session, err := s.session(sessionID)
 	if err != nil {

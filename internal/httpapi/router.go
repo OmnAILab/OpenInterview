@@ -63,6 +63,7 @@ func NewRouter(cfg Config, service *interview.Service, logger *log.Logger) http.
 	mux.HandleFunc("POST /api/sessions/{sessionID}/reset", router.handleReset)
 	mux.HandleFunc("POST /api/sessions/{sessionID}/debug/transcript", router.handleDebugTranscript)
 	mux.HandleFunc("POST /api/sessions/{sessionID}/ask", router.handleAskQuestion)
+	mux.HandleFunc("POST /api/sessions/{sessionID}/textdeal/marker", router.handleAddTextMarker)
 	mux.HandleFunc("POST /api/sessions/{sessionID}/textdeal/segment", router.handleSubmitTextSegment)
 
 	return router.withMiddleware(mux)
@@ -291,6 +292,23 @@ func (r *Router) handleSubmitTextSegment(w http.ResponseWriter, req *http.Reques
 	}
 
 	snapshot, err := r.service.SubmitTextSegment(req.PathValue("sessionID"), body.Stop)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, snapshot)
+}
+
+func (r *Router) handleAddTextMarker(w http.ResponseWriter, req *http.Request) {
+	var body struct {
+		Stop int `json:"stop"`
+	}
+	if err := decodeJSON(req, &body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+
+	snapshot, err := r.service.AddTextStopMarker(req.PathValue("sessionID"), body.Stop)
 	if err != nil {
 		writeServiceError(w, err)
 		return

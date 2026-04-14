@@ -244,6 +244,21 @@ func (s *Session) SubmitTextSegment(stop int) (Snapshot, error) {
 	return s.Snapshot(), nil
 }
 
+func (s *Session) AddTextStopMarker(stop int) (Snapshot, error) {
+	s.mu.Lock()
+	textDealSnapshot, err := s.textDeal.AddStopMarker(stop)
+	if err != nil {
+		s.mu.Unlock()
+		return Snapshot{}, fmt.Errorf("%w: %v", ErrBadRequest, err)
+	}
+	s.lastError = ""
+	s.mu.Unlock()
+
+	s.publish("textdeal.updated", textDealSnapshot)
+	s.log("textdeal", "stop marker added", map[string]any{"stop": stop})
+	return s.Snapshot(), nil
+}
+
 func (s *Session) Reset(ctx context.Context) (Snapshot, error) {
 	s.mu.Lock()
 	cancel := s.answerCancel

@@ -42,6 +42,23 @@ func (b *Buffer) AppendStable(text string) Snapshot {
 	return b.Snapshot()
 }
 
+func (b *Buffer) AddStopMarker(stop int) (Snapshot, error) {
+	total := utf8.RuneCountInString(b.stableText)
+	switch {
+	case total == 0:
+		return b.Snapshot(), fmt.Errorf("stable transcript is empty")
+	case stop < 0 || stop > total:
+		return b.Snapshot(), fmt.Errorf("stop index %d out of range 0..%d", stop, total)
+	case stop <= b.sentUntil:
+		return b.Snapshot(), fmt.Errorf("stop index %d must be greater than last stop %d", stop, b.sentUntil)
+	case b.hasMarker(stop):
+		return b.Snapshot(), fmt.Errorf("stop marker %d already exists", stop)
+	}
+
+	b.markers = append(b.markers, stop)
+	return b.Snapshot(), nil
+}
+
 func (b *Buffer) SubmitStop(stop int) (Segment, Snapshot, error) {
 	total := utf8.RuneCountInString(b.stableText)
 	switch {
@@ -65,7 +82,9 @@ func (b *Buffer) SubmitStop(stop int) (Segment, Snapshot, error) {
 	}
 
 	b.sentUntil = stop
-	b.markers = append(b.markers, stop)
+	if !b.hasMarker(stop) {
+		b.markers = append(b.markers, stop)
+	}
 
 	return result, b.Snapshot(), nil
 }
@@ -94,6 +113,15 @@ func (b Buffer) Snapshot() Snapshot {
 		Markers:     markers,
 		PendingText: strings.TrimSpace(sliceRunes(b.stableText, sentUntil, total)),
 	}
+}
+
+func (b Buffer) hasMarker(stop int) bool {
+	for _, marker := range b.markers {
+		if marker == stop {
+			return true
+		}
+	}
+	return false
 }
 
 func appendStableText(existing, next string) string {

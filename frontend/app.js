@@ -25,7 +25,7 @@ const translations = {
     "controls.settings": "设置",
     "controls.deleteSession": "删除会话",
     "controls.sendToCursor": "发送到LLM",
-    "controls.sendPendingTail": "截止符",
+    "controls.sendPendingTail": "插入截止符",
     "controls.close": "关闭",
     "controls.refreshDevices": "刷新设备",
     "controls.saveSettings": "保存设置",
@@ -98,6 +98,7 @@ const translations = {
     "hint.listeningMicrophone": "正在采集麦克风音频，稳态文本会持续累积在右侧。",
     "hint.listeningStopped": "已停止监听。",
     "hint.sessionReset": "会话已重置。",
+    "hint.stopMarkerAdded": "截止符已添加，未发送到 LLM。",
     "hint.segmentSubmitted": "片段已提交给 LLM，回答会继续显示在中间面板。",
     "hint.llmResponding": "LLM 正在生成回答。",
     "hint.llmDone": "LLM 已完成回答。",
@@ -133,7 +134,7 @@ const translations = {
     "controls.settings": "Settings",
     "controls.deleteSession": "Delete Session",
     "controls.sendToCursor": "Send To LLM",
-    "controls.sendPendingTail": "Pending Tail",
+    "controls.sendPendingTail": "Insert Stop",
     "controls.close": "Close",
     "controls.refreshDevices": "Refresh Devices",
     "controls.saveSettings": "Save Settings",
@@ -206,6 +207,7 @@ const translations = {
     "hint.listeningMicrophone": "Listening for microphone audio. Stable transcript will accumulate below.",
     "hint.listeningStopped": "Listening stopped.",
     "hint.sessionReset": "Session reset.",
+    "hint.stopMarkerAdded": "Stop marker added. Nothing was sent to the LLM.",
     "hint.segmentSubmitted": "Segment submitted to LLM. The answer stream will continue in the center panel.",
     "hint.llmResponding": "LLM is responding.",
     "hint.llmDone": "LLM finished answering.",
@@ -338,7 +340,7 @@ function bindActions() {
   elements.dockStartBtn?.addEventListener("click", () => runAction(startListening));
   elements.dockStopBtn?.addEventListener("click", () => runAction(stopListening));
   elements.sendCursorSegmentBtn.addEventListener("click", () => runAction(sendSegmentToCursor));
-  elements.sendTailSegmentBtn.addEventListener("click", () => runAction(sendPendingTail));
+  elements.sendTailSegmentBtn.addEventListener("click", () => runAction(addStopMarkerAtCursor));
   elements.transcriptEditor.addEventListener("click", syncTranscriptCursorFromSelection);
   elements.transcriptEditor.addEventListener("keyup", syncTranscriptCursorFromSelection);
   elements.transcriptEditor.addEventListener("select", syncTranscriptCursorFromSelection);
@@ -757,14 +759,17 @@ async function sendSegmentToCursor() {
   await submitTextDealStop(stop);
 }
 
-async function sendPendingTail() {
+async function addStopMarkerAtCursor() {
   ensureActiveSession();
-  const stop = codePointLength(state.textDeal.stableText);
+  const stop = getTranscriptCursorRaw();
   if (stop <= state.textDeal.sentUntil) {
-    throw new Error(t("error.noPendingStableText"));
+    throw new Error(t("error.moveStopForward"));
   }
-  state.transcriptCursorRaw = stop;
-  await submitTextDealStop(stop);
+  const snapshot = await requestJSON("POST", `/api/sessions/${encodeURIComponent(state.activeSessionId)}/textdeal/marker`, {
+    stop,
+  });
+  applySnapshot(snapshot);
+  renderDockHint(t("hint.stopMarkerAdded"));
 }
 
 async function submitTextDealStop(stop) {
