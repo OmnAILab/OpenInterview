@@ -5,6 +5,11 @@ const CAPTURE_SOURCE_STORAGE_KEY = "openinterview.frontend.captureSource";
 const LANGUAGE_STORAGE_KEY = "openinterview.frontend.language";
 const THEME_STORAGE_KEY = "openinterview.frontend.theme";
 const MARKDOWN_STORAGE_KEY = "openinterview.frontend.markdownEnabled";
+const SHORTCUTS_STORAGE_KEY = "openinterview.frontend.shortcuts";
+const DEFAULT_SHORTCUTS = Object.freeze({
+  sendToLLM: "q",
+  insertStop: "e",
+});
 
 const translations = {
   "zh-CN": {
@@ -71,6 +76,11 @@ const translations = {
     "settings.markdownTitle": "消息渲染",
     "settings.markdownEnabled": "启用 Markdown",
     "settings.markdownDesc": "用标题、列表、代码块和链接来渲染消息内容。",
+    "settings.shortcutsEyebrow": "快捷键",
+    "settings.shortcutsTitle": "键盘快捷键",
+    "settings.sendToLlmShortcut": "发送到 LLM",
+    "settings.insertStopShortcut": "插入截止符",
+    "settings.shortcutsDesc": "点击输入框后按一个按键。默认发送到 LLM 为 Q，插入截止符为 E。",
     "settings.sourceEyebrow": "音频来源",
     "settings.sourceTitle": "选择采集对象",
     "settings.microphoneTitle": "麦克风",
@@ -106,6 +116,8 @@ const translations = {
     "hint.llmInterrupted": "上一轮回答已被新的片段打断。",
     "error.moveStopForward": "请将停止符继续向后移动后再发送。",
     "error.noPendingStableText": "当前没有可发送的剩余稳态文本。",
+    "error.shortcutRequired": "请为两个快捷键都绑定一个按键。",
+    "error.shortcutConflict": "两个操作不能绑定同一个快捷键。",
     "error.noActiveSession": "当前没有会话，请先创建一个。",
     "error.captureRunning": "音频采集已经在运行中。",
     "error.noAudioTrack": "所选来源没有可用的音轨。",
@@ -180,6 +192,11 @@ const translations = {
     "settings.markdownTitle": "Message Rendering",
     "settings.markdownEnabled": "Enable Markdown",
     "settings.markdownDesc": "Render message content with headings, lists, code blocks, and links.",
+    "settings.shortcutsEyebrow": "Shortcuts",
+    "settings.shortcutsTitle": "Keyboard Shortcuts",
+    "settings.sendToLlmShortcut": "Send To LLM",
+    "settings.insertStopShortcut": "Insert Stop",
+    "settings.shortcutsDesc": "Focus a field and press one key. Defaults are Q for Send To LLM and E for Insert Stop.",
     "settings.sourceEyebrow": "Source",
     "settings.sourceTitle": "Choose What To Capture",
     "settings.microphoneTitle": "Microphone",
@@ -215,6 +232,8 @@ const translations = {
     "hint.llmInterrupted": "Previous answer interrupted by a new segment.",
     "error.moveStopForward": "Move the stop marker forward before sending.",
     "error.noPendingStableText": "There is no pending stable text to send.",
+    "error.shortcutRequired": "Bind one key for each shortcut.",
+    "error.shortcutConflict": "The two actions cannot use the same shortcut.",
     "error.noActiveSession": "No active session. Create one first.",
     "error.captureRunning": "Audio capture is already running.",
     "error.noAudioTrack": "No audio track is available from the selected source.",
@@ -252,6 +271,11 @@ const elements = {
   languageSelect: document.getElementById("languageSelect"),
   themeSelect: document.getElementById("themeSelect"),
   markdownEnabledToggle: document.getElementById("markdownEnabledToggle"),
+  sendToLlmShortcutInput: document.getElementById("sendToLlmShortcutInput"),
+  insertStopShortcutInput: document.getElementById("insertStopShortcutInput"),
+  shortcutSettingsHint: document.getElementById("shortcutSettingsHint"),
+  sendToLlmShortcutHint: document.getElementById("sendToLlmShortcutHint"),
+  insertStopShortcutHint: document.getElementById("insertStopShortcutHint"),
   deleteSessionBtn: document.getElementById("deleteSessionBtn"),
   activeSessionTitle: document.getElementById("activeSessionTitle"),
   activeSessionId: document.getElementById("activeSessionId"),
@@ -276,9 +300,12 @@ const state = {
     language: localStorage.getItem(LANGUAGE_STORAGE_KEY) || inferInitialLanguage(),
     theme: localStorage.getItem(THEME_STORAGE_KEY) || "system",
     markdownEnabled: localStorage.getItem(MARKDOWN_STORAGE_KEY) !== "false",
+    shortcuts: loadStoredShortcuts(),
     draftLanguage: "",
     draftTheme: "system",
     draftMarkdownEnabled: true,
+    draftShortcuts: { ...DEFAULT_SHORTCUTS },
+    shortcutError: "",
   },
   audio: {
     devices: [],
@@ -335,6 +362,10 @@ function bindActions() {
   elements.languageSelect.addEventListener("change", handleLanguageDraftChange);
   elements.themeSelect.addEventListener("change", handleThemeDraftChange);
   elements.markdownEnabledToggle.addEventListener("change", handleMarkdownDraftChange);
+  elements.sendToLlmShortcutInput.addEventListener("keydown", handleShortcutInputKeydown);
+  elements.insertStopShortcutInput.addEventListener("keydown", handleShortcutInputKeydown);
+  elements.sendToLlmShortcutInput.addEventListener("input", handleShortcutInputChange);
+  elements.insertStopShortcutInput.addEventListener("input", handleShortcutInputChange);
   elements.refreshAudioDevicesBtn.addEventListener("click", () => runAction(() => refreshAudioDevices({ requestPermission: true })));
   elements.deleteSessionBtn.addEventListener("click", () => runAction(deleteActiveSession));
   elements.dockStartBtn?.addEventListener("click", () => runAction(startListening));
@@ -359,6 +390,8 @@ function initializePreferences() {
   state.preferences.draftLanguage = state.preferences.language;
   state.preferences.draftTheme = state.preferences.theme;
   state.preferences.draftMarkdownEnabled = state.preferences.markdownEnabled;
+  state.preferences.shortcuts = normalizeShortcuts(state.preferences.shortcuts);
+  state.preferences.draftShortcuts = { ...state.preferences.shortcuts };
 
   applyTheme();
   renderTranslations();
@@ -416,6 +449,8 @@ async function openSettingsModal() {
   state.preferences.draftLanguage = state.preferences.language;
   state.preferences.draftTheme = state.preferences.theme;
   state.preferences.draftMarkdownEnabled = state.preferences.markdownEnabled;
+  state.preferences.draftShortcuts = { ...state.preferences.shortcuts };
+  state.preferences.shortcutError = "";
   renderSettingsModal();
   await refreshAudioDevices({ requestPermission: false });
 }
@@ -428,7 +463,56 @@ function closeSettingsModal() {
 function handleGlobalKeydown(event) {
   if (event.key === "Escape" && state.audio.settingsOpen) {
     closeSettingsModal();
+    return;
   }
+
+  if (shouldIgnoreShortcutEvent(event)) {
+    return;
+  }
+
+  const key = shortcutKeyFromKeyboardEvent(event);
+  if (!key) {
+    return;
+  }
+
+  if (key === state.preferences.shortcuts.sendToLLM) {
+    event.preventDefault();
+    void runAction(sendSegmentToCursor);
+    return;
+  }
+
+  if (key === state.preferences.shortcuts.insertStop) {
+    event.preventDefault();
+    void runAction(addStopMarkerAtCursor);
+  }
+}
+
+function shouldIgnoreShortcutEvent(event) {
+  if (
+    event.defaultPrevented ||
+    event.repeat ||
+    event.isComposing ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.altKey ||
+    state.audio.settingsOpen
+  ) {
+    return true;
+  }
+
+  const target = event.target;
+  if (!target || target === document.body || target === document.documentElement) {
+    return false;
+  }
+  if (target === elements.transcriptEditor) {
+    return false;
+  }
+  if (target instanceof HTMLElement && target.isContentEditable) {
+    return true;
+  }
+
+  const tagName = target.tagName ? target.tagName.toLowerCase() : "";
+  return tagName === "input" || tagName === "select" || tagName === "textarea";
 }
 
 function handleCaptureSourceDraftChange() {
@@ -452,10 +536,49 @@ function handleMarkdownDraftChange() {
   state.preferences.draftMarkdownEnabled = elements.markdownEnabledToggle.checked;
 }
 
+function handleShortcutInputKeydown(event) {
+  const key = shortcutKeyFromKeyboardEvent(event);
+  if (!key) {
+    return;
+  }
+
+  event.preventDefault();
+  state.preferences.shortcutError = "";
+  setDraftShortcutFromTarget(event.target, key);
+  renderShortcutSettings();
+}
+
+function handleShortcutInputChange(event) {
+  state.preferences.shortcutError = "";
+  setDraftShortcutFromTarget(event.target, normalizeShortcutKey(event.target.value));
+  renderShortcutSettings();
+}
+
+function setDraftShortcutFromTarget(target, key) {
+  if (target === elements.sendToLlmShortcutInput) {
+    state.preferences.draftShortcuts.sendToLLM = key;
+    return;
+  }
+  if (target === elements.insertStopShortcutInput) {
+    state.preferences.draftShortcuts.insertStop = key;
+  }
+}
+
 async function saveAudioSettings() {
+  let nextShortcuts;
+  try {
+    nextShortcuts = validateShortcutDraft();
+  } catch (error) {
+    state.preferences.shortcutError = error instanceof Error ? error.message : String(error);
+    renderSettingsModal();
+    throw error;
+  }
+
   state.preferences.language = normalizeLanguage(elements.languageSelect.value || state.preferences.draftLanguage);
   state.preferences.theme = normalizeTheme(elements.themeSelect.value || state.preferences.draftTheme);
   state.preferences.markdownEnabled = Boolean(state.preferences.draftMarkdownEnabled);
+  state.preferences.shortcuts = nextShortcuts;
+  state.preferences.shortcutError = "";
   persistPreferences();
   applyTheme();
   renderTranslations();
@@ -543,6 +666,7 @@ function renderSettingsModal(message) {
   elements.languageSelect.value = normalizeLanguage(state.preferences.draftLanguage);
   elements.themeSelect.value = normalizeTheme(state.preferences.draftTheme);
   elements.markdownEnabledToggle.checked = Boolean(state.preferences.draftMarkdownEnabled);
+  renderShortcutSettings();
 
   const options = state.audio.devices.length > 0
     ? state.audio.devices
@@ -562,6 +686,22 @@ function renderSettingsModal(message) {
         ? t("settings.noteMicrophoneActive")
         : t("settings.noteMicrophoneIdle");
   elements.audioDeviceHint.textContent = message || defaultMessage;
+}
+
+function renderShortcutSettings() {
+  elements.sendToLlmShortcutInput.value = formatShortcutKey(state.preferences.draftShortcuts.sendToLLM);
+  elements.insertStopShortcutInput.value = formatShortcutKey(state.preferences.draftShortcuts.insertStop);
+  elements.shortcutSettingsHint.textContent = state.preferences.shortcutError || t("settings.shortcutsDesc");
+}
+
+function renderShortcutHints() {
+  const sendToLLM = formatShortcutKey(state.preferences.shortcuts.sendToLLM);
+  const insertStop = formatShortcutKey(state.preferences.shortcuts.insertStop);
+
+  elements.sendToLlmShortcutHint.textContent = sendToLLM;
+  elements.insertStopShortcutHint.textContent = insertStop;
+  elements.sendCursorSegmentBtn.setAttribute("aria-keyshortcuts", sendToLLM);
+  elements.sendTailSegmentBtn.setAttribute("aria-keyshortcuts", insertStop);
 }
 
 async function createSession() {
@@ -603,6 +743,9 @@ async function selectSession(sessionId, options = {}) {
   }
 
   applySnapshot(nextSnapshot);
+  if (!hasConversationContent(nextSnapshot)) {
+    renderDockHint(t("stage.noAnswerYet"));
+  }
   if (openEvents) {
     openEventsForActiveSession();
   }
@@ -923,10 +1066,6 @@ function renderConversation() {
   const parts = [];
   const history = Array.isArray(snapshot.history) ? snapshot.history : [];
 
-  if (history.length === 0 && !snapshot.currentQuestion && !snapshot.currentAnswer) {
-    parts.push(systemMessageMarkup(t("stage.noAnswerYet")));
-  }
-
   for (const turn of history) {
     parts.push(messageMarkup("user", turn.question || ""));
     parts.push(messageMarkup("assistant", turn.answer || ""));
@@ -1012,7 +1151,7 @@ function renderEmptyStage() {
   elements.listeningState.textContent = t("status.false");
   elements.answeringState.textContent = t("status.false");
   elements.audioStats.textContent = formatAudioChunks(0);
-  elements.conversation.innerHTML = systemMessageMarkup(t("stage.createSessionHint"));
+  elements.conversation.innerHTML = "";
   setText(elements.partialTranscript, "", t("stage.awaitingTranscript"));
   setText(elements.pendingSegment, "", t("stage.noPendingStableText"));
   elements.transcriptEditor.value = "";
@@ -1021,11 +1160,6 @@ function renderEmptyStage() {
 
 function renderSystemMessage(message) {
   renderDockHint(message);
-  if (!state.snapshot) {
-    elements.conversation.innerHTML = systemMessageMarkup(message);
-    return;
-  }
-  elements.conversation.innerHTML = `${systemMessageMarkup(message)}${elements.conversation.innerHTML}`;
 }
 
 function renderDockHint(text) {
@@ -1045,15 +1179,9 @@ function messageMarkup(role, text) {
   `;
 }
 
-function systemMessageMarkup(text) {
-  return `
-    <div class="message-row system">
-      <article class="message-card">
-        <span class="message-role">${escapeHTML(t("stage.system"))}</span>
-        <div class="message-body">${renderPlainText(text)}</div>
-      </article>
-    </div>
-  `;
+function hasConversationContent(snapshot) {
+  const history = Array.isArray(snapshot?.history) ? snapshot.history : [];
+  return history.length > 0 || Boolean(snapshot?.currentQuestion) || Boolean(snapshot?.currentAnswer);
 }
 
 function syncTranscriptCursorFromSelection() {
@@ -1293,6 +1421,7 @@ function persistPreferences() {
   localStorage.setItem(LANGUAGE_STORAGE_KEY, state.preferences.language);
   localStorage.setItem(THEME_STORAGE_KEY, state.preferences.theme);
   localStorage.setItem(MARKDOWN_STORAGE_KEY, String(state.preferences.markdownEnabled));
+  localStorage.setItem(SHORTCUTS_STORAGE_KEY, JSON.stringify(state.preferences.shortcuts));
 }
 
 function persistAudioSettings() {
@@ -1323,6 +1452,7 @@ function renderTranslations() {
     node.setAttribute("placeholder", t(key));
   }
 
+  renderShortcutHints();
   relocalizeSessionMeta();
   renderSettingsModal();
   renderRuntime();
@@ -1409,6 +1539,56 @@ function normalizeLanguage(language) {
 
 function normalizeTheme(theme) {
   return ["system", "light", "dark"].includes(theme) ? theme : "system";
+}
+
+function loadStoredShortcuts() {
+  const raw = localStorage.getItem(SHORTCUTS_STORAGE_KEY);
+  if (!raw) {
+    return { ...DEFAULT_SHORTCUTS };
+  }
+
+  try {
+    return normalizeShortcuts(JSON.parse(raw));
+  } catch {
+    return { ...DEFAULT_SHORTCUTS };
+  }
+}
+
+function normalizeShortcuts(shortcuts) {
+  const sendToLLM = normalizeShortcutKey(shortcuts?.sendToLLM) || DEFAULT_SHORTCUTS.sendToLLM;
+  const insertStop = normalizeShortcutKey(shortcuts?.insertStop) || DEFAULT_SHORTCUTS.insertStop;
+  if (sendToLLM === insertStop) {
+    return { ...DEFAULT_SHORTCUTS };
+  }
+  return { sendToLLM, insertStop };
+}
+
+function validateShortcutDraft() {
+  const sendToLLM = normalizeShortcutKey(state.preferences.draftShortcuts.sendToLLM);
+  const insertStop = normalizeShortcutKey(state.preferences.draftShortcuts.insertStop);
+  if (!sendToLLM || !insertStop) {
+    throw new Error(t("error.shortcutRequired"));
+  }
+  if (sendToLLM === insertStop) {
+    throw new Error(t("error.shortcutConflict"));
+  }
+  return { sendToLLM, insertStop };
+}
+
+function shortcutKeyFromKeyboardEvent(event) {
+  if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey || Array.from(event.key || "").length !== 1) {
+    return "";
+  }
+  return normalizeShortcutKey(event.key);
+}
+
+function normalizeShortcutKey(value) {
+  const chars = Array.from(String(value || "").trim());
+  return chars.length > 0 ? chars[0].toLowerCase() : "";
+}
+
+function formatShortcutKey(key) {
+  return normalizeShortcutKey(key).toUpperCase();
 }
 
 function localizeRuntimeValue(value) {
