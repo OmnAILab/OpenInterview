@@ -159,22 +159,6 @@ func (s *tencentAsrWebSocketStream) Close() error {
 	return nil
 }
 
-func (s *tencentAsrWebSocketStream) emitFinalIfNeeded(endpoint bool) {
-	s.stateMu.Lock()
-	text := strings.TrimSpace(s.listener.activeText)
-	s.listener.activeText = ""
-	s.stateMu.Unlock()
-
-	if text == "" {
-		return
-	}
-
-	s.listener.sink.HandleTranscriptEvent(context.Background(), TranscriptEvent{
-		Kind:     EventFinal,
-		Text:     text,
-		Endpoint: endpoint,
-	})
-}
 
 func (s *tencentAsrWebSocketStream) readLoop() {
 	defer close(s.connDone)
@@ -183,9 +167,7 @@ func (s *tencentAsrWebSocketStream) readLoop() {
 	for {
 		msgType, payload, err := s.conn.ReadMessage()
 		if err != nil {
-			//s.listener.OnRecognitionComplete(nil)
-
-			s.emitFinalIfNeeded(true)
+			s.listener.OnRecognitionComplete(nil)
 
 			s.stateMu.Lock()
 			unexpectedClose := !s.expectClose
@@ -333,13 +315,25 @@ func (l *tencentTranscriptListener) OnRecognitionResultChange(response *TencentA
 		return
 	}
 	l.mu.Lock()
+	prevIndex := l.activeIndex
+	prevText := strings.TrimSpace(l.activeText)
 	l.activeIndex = result.Index
 	l.activeText = result.VoiceTextStr
 	l.mu.Unlock()
 
-	// if result.VoiceTextStr == "" {
-	// 	return
-	// }
+	// When the index advances, the previous segment is complete — emit a
+	// final event before the new partial, mirroring Sherpa's behaviour.
+	// prevIndex >= 0: skip the initial state where no segment is active yet.
+	// result.Index > prevIndex: only fire when the server moved to a new segment.
+	// prevText != "": avoid emitting empty final events.
+	if prevIndex >= 0 && result.Index > prevIndex && prevText != "" {
+		l.sink.HandleTranscriptEvent(context.Background(), TranscriptEvent{
+			Kind:     EventFinal,
+			Text:     prevText,
+			Endpoint: true,
+		})
+	}
+
 	l.emitPartial(result.Index, result.VoiceTextStr)
 }
 
@@ -372,42 +366,34 @@ func (l *tencentTranscriptListener) OnSentenceEnd(response *TencentAsrResponse) 
 	}
 }
 
-// func (l *tencentTranscriptListener) OnRecognitionComplete(_ *TencentAsrResponse) {
-// 	l.mu.Lock()
-// 	if l.completed {
-// 		l.mu.Unlock()
-// 		return
-// 	}
-// 	l.completed = true
+func (l *tencentTranscriptListener) OnRecognitionComplete(_ *TencentAsrResponse) {
+	l.mu.Lock()
+	if l.completed {
+		l.mu.Unlock()
+		return
+	}
+	l.completed = true
 
-// 	index := l.activeIndex
-// 	text := strings.TrimSpace(l.activeText)
-// 	l.activeIndex = -1
-// 	l.activeText = ""
+	index := l.activeIndex
+	text := strings.TrimSpace(l.activeText)
+	l.activeIndex = -1
+	l.activeText = ""
 
-// 	shouldEmit := text != "" && (index != l.lastFinalIndex || text != l.lastFinalText)
-// 	if shouldEmit {
-// 		l.lastFinalIndex = index
-// 		l.lastFinalText = text
-// 	}
-// 	l.mu.Unlock()
+	shouldEmit := text != "" && (index != l.lastFinalIndex || text != l.lastFinalText)
+	if shouldEmit {
+		l.lastFinalIndex = index
+		l.lastFinalText = text
+	}
+	l.mu.Unlock()
 
-// 	if shouldEmit {
-// 		l.sink.HandleTranscriptEvent(context.Background(), TranscriptEvent{
-// 			Kind:     EventFinal,
-// 			Text:     text,
-// 			Endpoint: true,
-// 		})
-// 		return
-// 	}
-
-// 	// Always emit endpoint signal to notify LLM of completion
-// 	l.sink.HandleTranscriptEvent(context.Background(), TranscriptEvent{
-// 		Kind:     EventFinal,
-// 		Text:     "",
-// 		Endpoint: true,
-// 	})
-// }
+	if shouldEmit {
+		l.sink.HandleTranscriptEvent(context.Background(), TranscriptEvent{
+			Kind:     EventFinal,
+			Text:     text,
+			Endpoint: true,
+		})
+	}
+}
 
 func (l *tencentTranscriptListener) OnFail(_ *TencentAsrResponse, err error) {
 	if err == nil {
