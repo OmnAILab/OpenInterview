@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"openinterview/internal/knowledge"
 	"openinterview/internal/llm"
 	"openinterview/internal/stt"
 	"openinterview/internal/textdeal"
@@ -19,6 +20,7 @@ type Session struct {
 	cfg        Config
 	sttFactory stt.Factory
 	llm        llm.Client
+	knowledge  knowledge.Client
 	logger     *log.Logger
 	broker     *broker
 
@@ -32,6 +34,7 @@ type Session struct {
 	currentAnswer     string
 	profile           CandidateProfile
 	history           []Turn
+	knowledgeHits     []KnowledgeHit
 	audio             AudioStats
 	lastError         string
 	stream            stt.Stream
@@ -54,12 +57,13 @@ func (s sessionSTTSink) HandleSTTError(ctx context.Context, err error) {
 	s.session.handleSTTErrorForGeneration(ctx, s.generation, err)
 }
 
-func newSession(id string, cfg Config, sttFactory stt.Factory, llmClient llm.Client, logger *log.Logger) *Session {
+func newSession(id string, cfg Config, sttFactory stt.Factory, llmClient llm.Client, knowledgeClient knowledge.Client, logger *log.Logger) *Session {
 	return &Session{
 		id:         id,
 		cfg:        cfg,
 		sttFactory: sttFactory,
 		llm:        llmClient,
+		knowledge:  knowledgeClient,
 		logger:     logger,
 		broker:     newBroker(),
 	}
@@ -273,6 +277,7 @@ func (s *Session) Reset(ctx context.Context) (Snapshot, error) {
 	s.currentQuestion = ""
 	s.currentAnswer = ""
 	s.history = nil
+	s.knowledgeHits = nil
 	s.audio = AudioStats{}
 	s.lastError = ""
 	s.mu.Unlock()
@@ -412,10 +417,8 @@ func (s *Session) handleTranscript(event stt.TranscriptEvent) {
 }
 
 func (s *Session) startAnswer(question string) {
-	request := llm.Request{
-		Question: question,
-		Messages: buildMessages(s.profileSnapshot(), s.historySnapshot(), question),
-	}
+	profile := s.profileSnapshot()
+	history := s.historySnapshot()
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -426,6 +429,7 @@ func (s *Session) startAnswer(question string) {
 	s.answerCancel = cancel
 	s.answerInProgress = true
 	s.currentAnswer = ""
+	s.knowledgeHits = nil
 	s.lastError = ""
 	snapshot := s.snapshotLocked()
 	s.mu.Unlock()
@@ -441,6 +445,14 @@ func (s *Session) startAnswer(question string) {
 	s.log("llm", "starting answer generation", map[string]any{"question": question})
 
 	go func() {
+		retrieved := s.retrieveKnowledge(ctx, question)
+		s.setKnowledgeHits(answerID, retrieved)
+
+		request := llm.Request{
+			Question: question,
+			Messages: buildMessages(profile, history, question, retrieved),
+		}
+
 		answer, err := s.llm.StreamAnswer(ctx, request, func(token string) {
 			s.appendAnswerToken(answerID, token)
 		})
@@ -503,6 +515,57 @@ func (s *Session) appendAnswerToken(answerID int64, token string) {
 	s.mu.Unlock()
 
 	s.publish("llm.token", map[string]any{"token": token})
+}
+
+func (s *Session) retrieveKnowledge(ctx context.Context, question string) []knowledge.Document {
+	if s.knowledge == nil {
+		return nil
+	}
+
+	docs, err := s.knowledge.Retrieve(ctx, question)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
+		s.log("knowledge", "knowledge retrieval failed", map[string]any{"error": err.Error()})
+		return nil
+	}
+	if len(docs) == 0 {
+		s.log("knowledge", "knowledge retrieval returned no results", map[string]any{"question": question})
+		return nil
+	}
+
+	s.log("knowledge", "knowledge retrieved", map[string]any{
+		"question": question,
+		"results":  len(docs),
+	})
+	return docs
+}
+
+func (s *Session) setKnowledgeHits(answerID int64, docs []knowledge.Document) {
+	hits := make([]KnowledgeHit, 0, len(docs))
+	for _, doc := range docs {
+		hits = append(hits, KnowledgeHit{
+			Title:   doc.Title,
+			Content: doc.Content,
+			Path:    doc.Path,
+			Score:   doc.Score,
+		})
+	}
+
+	s.mu.Lock()
+	if answerID != s.activeAnswerID {
+		s.mu.Unlock()
+		return
+	}
+	s.knowledgeHits = hits
+	snapshot := s.snapshotLocked()
+	s.mu.Unlock()
+
+	s.publish("knowledge.retrieved", map[string]any{
+		"question": snapshot.CurrentQuestion,
+		"results":  snapshot.Knowledge,
+	})
 }
 
 func (s *Session) profileSnapshot() CandidateProfile {
@@ -596,6 +659,7 @@ func (s *Session) setError(err error) {
 func (s *Session) snapshotLocked() Snapshot {
 	history := append([]Turn(nil), s.history...)
 	finals := append([]string(nil), s.finalTranscripts...)
+	knowledgeHits := append([]KnowledgeHit(nil), s.knowledgeHits...)
 	return Snapshot{
 		ID:                s.id,
 		Listening:         s.listening,
@@ -607,6 +671,7 @@ func (s *Session) snapshotLocked() Snapshot {
 		CurrentAnswer:     s.currentAnswer,
 		Profile:           s.profile,
 		History:           history,
+		Knowledge:         knowledgeHits,
 		Audio:             s.audio,
 		LastError:         s.lastError,
 	}
@@ -641,7 +706,7 @@ func compactStrings(values []string) []string {
 	return result
 }
 
-func buildMessages(profile CandidateProfile, history []Turn, question string) []llm.Message {
+func buildMessages(profile CandidateProfile, history []Turn, question string, docs []knowledge.Document) []llm.Message {
 	var builder strings.Builder
 	builder.WriteString("Candidate profile:\n")
 	if profile.TargetRole != "" {
@@ -668,6 +733,24 @@ func buildMessages(profile CandidateProfile, history []Turn, question string) []
 		builder.WriteString("Answer style: ")
 		builder.WriteString(profile.AnswerStyle)
 		builder.WriteString("\n")
+	}
+	if len(docs) > 0 {
+		builder.WriteString("\nRetrieved knowledge:\n")
+		for i, doc := range docs {
+			builder.WriteString(fmt.Sprintf("[%d] %s", i+1, doc.Title))
+			if doc.Path != "" {
+				builder.WriteString(" (")
+				builder.WriteString(doc.Path)
+				builder.WriteString(")")
+			}
+			if doc.Score > 0 {
+				builder.WriteString(fmt.Sprintf(" score=%.3f", doc.Score))
+			}
+			builder.WriteString("\n")
+			builder.WriteString(doc.Content)
+			builder.WriteString("\n\n")
+		}
+		builder.WriteString("Use retrieved knowledge only when it is directly relevant. Do not invent first-person experience that is not supported by the candidate profile.\n")
 	}
 
 	messages := []llm.Message{

@@ -4,6 +4,112 @@
 
 ---
 
+## RAG with sentence-transformers
+
+项目目前支持两种知识库接入方式：
+
+1. `interviewd` 直接读取本地 `.md` / `.txt` 文件，并调用 embedding 接口做检索。
+2. `interviewd` 调用独立知识库服务，例如 `go run ./cmd/kbd`。
+
+最简单的是本地向量检索模式。
+
+### 1. 准备知识库文件
+
+在项目根目录创建 `./knowledge`，将你的简历信息、项目总结、STAR 故事、架构说明、常见追问等内容整理成 `.md` 或 `.txt` 文件放进去。
+
+### 2. 安装 Python 依赖并启动 embedding 服务
+
+```bash
+pip install -r requirements.txt
+python tools/sentence_transformers_server.py
+```
+
+默认监听 `http://127.0.0.1:7008/embed`，默认模型为 `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`。
+
+### 3. 配置 OpenInterview
+
+将以下配置加入 `.env`：
+
+```bash
+INTERVIEW_KNOWLEDGE_LOCAL_PATH=./knowledge
+INTERVIEW_KNOWLEDGE_EMBEDDING_ENDPOINT=http://127.0.0.1:7008/embed
+INTERVIEW_KNOWLEDGE_EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+INTERVIEW_KNOWLEDGE_MAX_RESULTS=5
+INTERVIEW_KNOWLEDGE_TIMEOUT=10s
+```
+
+然后正常启动主服务：
+
+```bash
+go run ./cmd/interviewd
+```
+
+后端会在每次生成答案前，先检索最相关的知识片段并注入到提示词中。
+
+### 可选：独立运行知识库服务
+
+如果你想把检索能力从 `interviewd` 中拆出来，可以单独启动：
+
+```bash
+go run ./cmd/kbd
+```
+
+然后在 `.env` 中配置：
+
+```bash
+INTERVIEW_KNOWLEDGE_ENDPOINT=http://127.0.0.1:7007/search
+```
+
+## Sherpa 本地部署
+
+如果你打算使用本地 Sherpa 作为 STT，而不是腾讯云 ASR，可以按下面的方式准备环境。
+
+### 1. 安装 Python 依赖
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. 准备模型
+
+可以把模型目录复制到仓库内的以下位置：
+
+```text
+third_party/sherpa-models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20
+```
+
+这个目录已经加入 `.gitignore`，模型文件不会提交到 Git。
+
+### 3. 启动官方 `streaming_server.py`
+
+推荐直接使用 `sherpa-onnx` 仓库自带的 `python-api-examples/streaming_server.py`。注意这个脚本要在 `sherpa-onnx` 仓库根目录运行，因为它会导入同目录下的 `http_server.py`。
+
+Windows / PowerShell 示例：
+
+```powershell
+cd D:\.github\sherpa-onnx
+
+$model = "D:\.github\OpenInterview\third_party\sherpa-models\sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20"
+
+python .\python-api-examples\streaming_server.py `
+  --encoder "$model\encoder-epoch-99-avg-1.onnx" `
+  --decoder "$model\decoder-epoch-99-avg-1.onnx" `
+  --joiner "$model\joiner-epoch-99-avg-1.onnx" `
+  --tokens "$model\tokens.txt" `
+  --port 6006
+```
+
+### 4. 配置 OpenInterview 使用 Sherpa
+
+在 `.env` 中确认以下配置：
+
+```bash
+INTERVIEW_STT_PROVIDER=sherpa
+INTERVIEW_SHERPA_WS_URL=ws://127.0.0.1:6006/
+```
+
+确认 Sherpa 已经监听 `6006` 端口后，再启动 `interviewd` 即可。
+
 ## 为什么要用 OpenInterview？
 
 求职面试往往充满压力——面对突如其来的技术题或行为题，即使准备充分的候选人也可能因紧张而发挥失常。  
@@ -90,7 +196,9 @@ Sherpa/腾讯云 ASR     Groq/其他 LLM
 **前置依赖：**
 - [Go 1.21+](https://go.dev/dl/)
 - [Node.js](https://nodejs.org/)（用于前端开发服务器）
-- [腾讯云账号](https://cloud.tencent.com/)，并开通[实时语音识别](https://cloud.tencent.com/product/asr)，获取 `AppID`、`SecretID`、`SecretKey`(或者本地部署Sherpa-Onnx)
+- [Python 3.10+](https://www.python.org/)（如果你要启用 Sherpa 或 RAG）
+- [腾讯云账号](https://cloud.tencent.com/)，并开通[实时语音识别](https://cloud.tencent.com/product/asr)，获取 `AppID`、`SecretID`、`SecretKey`（如果使用腾讯云 ASR）
+- 本地 `sherpa-onnx` 环境和模型文件（如果使用 Sherpa，见上文“Sherpa 本地部署”）
 - Groq API Key（或其他兼容 OpenAI API 的 LLM 服务）
 
 ### 2. 配置环境变量

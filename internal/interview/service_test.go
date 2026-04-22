@@ -5,6 +5,7 @@ import (
 	"log"
 	"testing"
 
+	"openinterview/internal/knowledge"
 	"openinterview/internal/llm"
 	"openinterview/internal/stt"
 )
@@ -17,7 +18,7 @@ func TestServiceDeleteSessionRemovesSession(t *testing.T) {
 		ExpectedChannels: 1,
 		ExpectedEncoding: "pcm16",
 		MaxChunkBytes:    262144,
-	}, stt.NewFactory(stt.Config{Provider: "mock"}, logger), llm.NewClient(llm.Config{Provider: "mock"}, logger), logger)
+	}, stt.NewFactory(stt.Config{Provider: "mock"}, logger), llm.NewClient(llm.Config{Provider: "mock"}, logger), knowledge.NewClient(knowledge.Config{}, logger), logger)
 
 	snapshot := service.CreateSession()
 	if err := service.DeleteSession(snapshot.ID); err != nil {

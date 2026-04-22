@@ -26,6 +26,13 @@ type AudioStats struct {
 	LastChunkAt *time.Time `json:"lastChunkAt,omitempty"`
 }
 
+type KnowledgeHit struct {
+	Title   string  `json:"title"`
+	Content string  `json:"content"`
+	Path    string  `json:"path,omitempty"`
+	Score   float64 `json:"score,omitempty"`
+}
+
 type Snapshot struct {
 	ID                string            `json:"id"`
 	Listening         bool              `json:"listening"`
@@ -37,6 +44,7 @@ type Snapshot struct {
 	CurrentAnswer     string            `json:"currentAnswer"`
 	Profile           CandidateProfile  `json:"profile"`
 	History           []Turn            `json:"history"`
+	Knowledge         []KnowledgeHit    `json:"knowledge"`
 	Audio             AudioStats        `json:"audio"`
 	LastError         string            `json:"lastError,omitempty"`
 }

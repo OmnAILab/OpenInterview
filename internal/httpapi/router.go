@@ -21,8 +21,9 @@ type Config struct {
 }
 
 type RuntimeConfig struct {
-	STT RuntimeSTTConfig `json:"stt"`
-	LLM RuntimeLLMConfig `json:"llm"`
+	STT       RuntimeSTTConfig       `json:"stt"`
+	LLM       RuntimeLLMConfig       `json:"llm"`
+	Knowledge RuntimeKnowledgeConfig `json:"knowledge"`
 }
 
 type RuntimeSTTConfig struct {
@@ -34,6 +35,12 @@ type RuntimeSTTConfig struct {
 type RuntimeLLMConfig struct {
 	Provider string `json:"provider"`
 	Model    string `json:"model"`
+}
+
+type RuntimeKnowledgeConfig struct {
+	Enabled    bool   `json:"enabled"`
+	Mode       string `json:"mode,omitempty"`
+	MaxResults int    `json:"maxResults,omitempty"`
 }
 
 type Router struct {

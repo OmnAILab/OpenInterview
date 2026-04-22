@@ -14,6 +14,7 @@ import (
 	"openinterview/internal/config"
 	"openinterview/internal/httpapi"
 	"openinterview/internal/interview"
+	"openinterview/internal/knowledge"
 	"openinterview/internal/llm"
 	"openinterview/internal/stt"
 )
@@ -47,6 +48,15 @@ func main() {
 		Temperature:  cfg.LLM.Temperature,
 		Timeout:      cfg.LLM.Timeout,
 	}, logger)
+	knowledgeClient := knowledge.NewClient(knowledge.Config{
+		Path:              cfg.Knowledge.Path,
+		SearchEndpoint:    cfg.Knowledge.SearchEndpoint,
+		MaxResults:        cfg.Knowledge.MaxResults,
+		EmbeddingEndpoint: cfg.Knowledge.EmbeddingEndpoint,
+		EmbeddingAPIKey:   cfg.Knowledge.APIKey,
+		EmbeddingModel:    cfg.Knowledge.EmbeddingModel,
+		Timeout:           cfg.Knowledge.Timeout,
+	}, logger)
 
 	service := interview.NewService(interview.Config{
 		MaxTurns:         cfg.Session.MaxTurns,
@@ -54,7 +64,7 @@ func main() {
 		ExpectedChannels: cfg.Audio.Channels,
 		ExpectedRate:     cfg.Audio.SampleRate,
 		MaxChunkBytes:    cfg.Audio.MaxChunkBytes,
-	}, sttFactory, llmClient, logger)
+	}, sttFactory, llmClient, knowledgeClient, logger)
 	directSTTWSURL := directSTTWebSocketURL(cfg.STT.Provider)
 
 	handler := httpapi.NewRouter(httpapi.Config{
@@ -68,6 +78,11 @@ func main() {
 			LLM: httpapi.RuntimeLLMConfig{
 				Provider: cfg.LLM.Provider,
 				Model:    cfg.LLM.Model,
+			},
+			Knowledge: httpapi.RuntimeKnowledgeConfig{
+				Enabled:    knowledgeEnabled(cfg),
+				Mode:       knowledgeMode(cfg),
+				MaxResults: cfg.Knowledge.MaxResults,
 			},
 		},
 	}, service, logger)
@@ -96,6 +111,21 @@ func main() {
 
 	if err := server.Shutdown(ctx); err != nil {
 		logger.Printf("shutdown failed: %v", err)
+	}
+}
+
+func knowledgeEnabled(cfg config.Config) bool {
+	return knowledgeMode(cfg) != ""
+}
+
+func knowledgeMode(cfg config.Config) string {
+	switch {
+	case strings.TrimSpace(cfg.Knowledge.SearchEndpoint) != "":
+		return "remote-search"
+	case strings.TrimSpace(cfg.Knowledge.Path) != "" && strings.TrimSpace(cfg.Knowledge.EmbeddingEndpoint) != "":
+		return "local-vector"
+	default:
+		return ""
 	}
 }
 

@@ -13,11 +13,12 @@ import (
 )
 
 type Config struct {
-	Server  ServerConfig
-	Session SessionConfig
-	Audio   AudioConfig
-	STT     STTConfig
-	LLM     LLMConfig
+	Server    ServerConfig
+	Session   SessionConfig
+	Audio     AudioConfig
+	STT       STTConfig
+	LLM       LLMConfig
+	Knowledge KnowledgeConfig
 }
 
 type ServerConfig struct {
@@ -66,6 +67,17 @@ type LLMConfig struct {
 	Timeout      time.Duration
 }
 
+type KnowledgeConfig struct {
+	SearchEndpoint    string
+	Path              string
+	APIKey            string
+	EmbeddingEndpoint string
+	EmbeddingModel    string
+	MaxResults        int
+	Timeout           time.Duration
+	LocalAddr         string
+}
+
 func Load() Config {
 	loadDotEnv(filepath.Join(".", ".env"))
 
@@ -109,6 +121,16 @@ func Load() Config {
 			SystemPrompt: envString("INTERVIEW_LLM_SYSTEM_PROMPT", defaultSystemPrompt),
 			Temperature:  envFloat("INTERVIEW_LLM_TEMPERATURE", 0.2),
 			Timeout:      envDuration("INTERVIEW_LLM_TIMEOUT", 90*time.Second),
+		},
+		Knowledge: KnowledgeConfig{
+			SearchEndpoint:    envString("INTERVIEW_KNOWLEDGE_ENDPOINT", ""),
+			Path:              firstNonEmptyEnv("INTERVIEW_KNOWLEDGE_LOCAL_PATH", "INTERVIEW_KNOWLEDGE_PATH"),
+			APIKey:            firstNonEmptyEnv("INTERVIEW_KNOWLEDGE_API_KEY", "INTERVIEW_EMBEDDING_API_KEY"),
+			EmbeddingEndpoint: firstNonEmptyEnv("INTERVIEW_KNOWLEDGE_EMBEDDING_ENDPOINT", "INTERVIEW_EMBEDDING_ENDPOINT"),
+			EmbeddingModel:    firstNonEmptyEnv("INTERVIEW_KNOWLEDGE_EMBEDDING_MODEL", "INTERVIEW_EMBEDDING_MODEL"),
+			MaxResults:        envInt("INTERVIEW_KNOWLEDGE_MAX_RESULTS", 5),
+			Timeout:           envDuration("INTERVIEW_KNOWLEDGE_TIMEOUT", 10*time.Second),
+			LocalAddr:         envString("INTERVIEW_KNOWLEDGE_LOCAL_ADDR", ":7007"),
 		},
 	}
 }
@@ -343,4 +365,13 @@ func envDuration(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return parsed
+}
+
+func firstNonEmptyEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := envString(key, ""); strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

@@ -19,6 +19,7 @@ import (
 
 type Config struct {
 	Path              string
+	SearchEndpoint    string
 	MaxResults        int
 	EmbeddingEndpoint string
 	EmbeddingAPIKey   string
@@ -39,15 +40,23 @@ type Client interface {
 
 func NewClient(cfg Config, logger *log.Logger) Client {
 	cfg.Path = strings.TrimSpace(cfg.Path)
+	cfg.SearchEndpoint = strings.TrimSpace(cfg.SearchEndpoint)
 	cfg.EmbeddingEndpoint = strings.TrimSpace(cfg.EmbeddingEndpoint)
-	if cfg.Path == "" || cfg.EmbeddingEndpoint == "" {
-		return noopClient{}
-	}
 	if cfg.MaxResults <= 0 {
 		cfg.MaxResults = 5
 	}
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = 15 * time.Second
+	}
+	if cfg.SearchEndpoint != "" {
+		return &remoteSearchClient{
+			cfg:    cfg,
+			client: &http.Client{Timeout: cfg.Timeout},
+			logger: logger,
+		}
+	}
+	if cfg.Path == "" || cfg.EmbeddingEndpoint == "" {
+		return noopClient{}
 	}
 	return &localVectorClient{
 		cfg:      cfg,
@@ -60,6 +69,69 @@ type noopClient struct{}
 
 func (noopClient) Retrieve(context.Context, string) ([]Document, error) {
 	return nil, nil
+}
+
+type remoteSearchClient struct {
+	cfg    Config
+	client *http.Client
+	logger *log.Logger
+}
+
+func (c *remoteSearchClient) Retrieve(ctx context.Context, query string) ([]Document, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, nil
+	}
+
+	body := map[string]any{
+		"query":    query,
+		"question": query,
+		"text":     query,
+		"top_k":    c.cfg.MaxResults,
+		"topK":     c.cfg.MaxResults,
+		"limit":    c.cfg.MaxResults,
+	}
+
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.SearchEndpoint, bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if c.cfg.EmbeddingAPIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.cfg.EmbeddingAPIKey)
+		req.Header.Set("X-API-Key", c.cfg.EmbeddingAPIKey)
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	payload, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("knowledge request failed: %s: %s", resp.Status, strings.TrimSpace(string(payload)))
+	}
+
+	results, err := parseSearchResponse(payload)
+	if err != nil {
+		return nil, err
+	}
+	if len(results) > c.cfg.MaxResults {
+		results = results[:c.cfg.MaxResults]
+	}
+	if c.logger != nil {
+		c.logger.Printf("knowledge retrieved %d chunks from %s", len(results), c.cfg.SearchEndpoint)
+	}
+	return results, nil
 }
 
 type localVectorClient struct {
@@ -87,7 +159,7 @@ func (c *localVectorClient) Retrieve(ctx context.Context, query string) ([]Docum
 		return nil, err
 	}
 
-	queryVectors, err := c.embedder.Embed(ctx, []string{query})
+	queryVectors, err := c.embedder.Embed(ctx, []string{query}, "query")
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +224,7 @@ func (c *localVectorClient) load(ctx context.Context) ([]indexedDocument, error)
 	for _, doc := range docs {
 		texts = append(texts, doc.Content)
 	}
-	vectors, err := c.embedder.Embed(ctx, texts)
+	vectors, err := c.embedder.Embed(ctx, texts, "document")
 	if err != nil {
 		return nil, err
 	}
@@ -282,11 +354,13 @@ type remoteEmbedder struct {
 	client *http.Client
 }
 
-func (e remoteEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+func (e remoteEmbedder) Embed(ctx context.Context, texts []string, task string) ([][]float32, error) {
 	body := map[string]any{
 		"texts":     texts,
 		"inputs":    texts,
 		"sentences": texts,
+		"task":      task,
+		"normalize": true,
 	}
 	if e.cfg.EmbeddingModel != "" {
 		body["model"] = e.cfg.EmbeddingModel
@@ -321,6 +395,135 @@ func (e remoteEmbedder) Embed(ctx context.Context, texts []string) ([][]float32,
 		return nil, fmt.Errorf("embedding request failed: %s: %s", resp.Status, strings.TrimSpace(string(payload)))
 	}
 	return parseEmbeddingResponse(payload)
+}
+
+func parseSearchResponse(payload []byte) ([]Document, error) {
+	var raw any
+	if err := json.Unmarshal(payload, &raw); err != nil {
+		return nil, err
+	}
+	return extractDocuments(raw), nil
+}
+
+func extractDocuments(raw any) []Document {
+	switch value := raw.(type) {
+	case []any:
+		return extractDocumentList(value)
+	case map[string]any:
+		for _, key := range []string{"results", "data", "documents", "records", "hits"} {
+			if docs := extractDocuments(value[key]); len(docs) > 0 {
+				return docs
+			}
+		}
+		if docs := extractDocumentCandidates(value); len(docs) > 0 {
+			return docs
+		}
+	}
+	return nil
+}
+
+func extractDocumentList(items []any) []Document {
+	result := make([]Document, 0, len(items))
+	for _, item := range items {
+		switch value := item.(type) {
+		case map[string]any:
+			if doc, ok := toDocument(value); ok {
+				result = append(result, doc)
+				continue
+			}
+			if docs := extractDocuments(value); len(docs) > 0 {
+				result = append(result, docs...)
+			}
+		case string:
+			text := strings.TrimSpace(value)
+			if text != "" {
+				result = append(result, Document{Content: text, Title: "result"})
+			}
+		}
+	}
+	return result
+}
+
+func extractDocumentCandidates(value map[string]any) []Document {
+	if doc, ok := toDocument(value); ok {
+		return []Document{doc}
+	}
+	return nil
+}
+
+func toDocument(value map[string]any) (Document, bool) {
+	if embedded, ok := value["document"].(map[string]any); ok {
+		if doc, ok := toDocument(embedded); ok {
+			if doc.Score == 0 {
+				doc.Score = extractFloat(value, "score", "similarity", "relevance")
+			}
+			return doc, true
+		}
+	}
+
+	content := firstNonEmptyString(value, "content", "text", "body", "snippet", "chunk")
+	title := firstNonEmptyString(value, "title", "name", "heading")
+	path := firstNonEmptyString(value, "path", "source", "file")
+	if content == "" {
+		return Document{}, false
+	}
+	if title == "" {
+		title = inferTitle(path)
+	}
+	if title == "" {
+		title = "result"
+	}
+	return Document{
+		Title:   title,
+		Content: content,
+		Path:    path,
+		Score:   extractFloat(value, "score", "similarity", "relevance"),
+	}, true
+}
+
+func firstNonEmptyString(value map[string]any, keys ...string) string {
+	for _, key := range keys {
+		raw, ok := value[key]
+		if !ok {
+			continue
+		}
+		switch typed := raw.(type) {
+		case string:
+			if trimmed := strings.TrimSpace(typed); trimmed != "" {
+				return trimmed
+			}
+		}
+	}
+	return ""
+}
+
+func extractFloat(value map[string]any, keys ...string) float64 {
+	for _, key := range keys {
+		raw, ok := value[key]
+		if !ok {
+			continue
+		}
+		switch typed := raw.(type) {
+		case float64:
+			return typed
+		case float32:
+			return float64(typed)
+		case int:
+			return float64(typed)
+		case int64:
+			return float64(typed)
+		}
+	}
+	return 0
+}
+
+func inferTitle(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	base := filepath.Base(path)
+	return strings.TrimSuffix(base, filepath.Ext(base))
 }
 
 func parseEmbeddingResponse(payload []byte) ([][]float32, error) {

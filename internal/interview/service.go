@@ -8,6 +8,7 @@ import (
 	"log"
 	"sync"
 
+	"openinterview/internal/knowledge"
 	"openinterview/internal/llm"
 	"openinterview/internal/stt"
 )
@@ -24,13 +25,14 @@ type Service struct {
 	cfg        Config
 	sttFactory stt.Factory
 	llm        llm.Client
+	knowledge  knowledge.Client
 	logger     *log.Logger
 
 	mu       sync.RWMutex
 	sessions map[string]*Session
 }
 
-func NewService(cfg Config, sttFactory stt.Factory, llmClient llm.Client, logger *log.Logger) *Service {
+func NewService(cfg Config, sttFactory stt.Factory, llmClient llm.Client, knowledgeClient knowledge.Client, logger *log.Logger) *Service {
 	if cfg.MaxTurns <= 0 {
 		cfg.MaxTurns = 5
 	}
@@ -38,6 +40,7 @@ func NewService(cfg Config, sttFactory stt.Factory, llmClient llm.Client, logger
 		cfg:        cfg,
 		sttFactory: sttFactory,
 		llm:        llmClient,
+		knowledge:  knowledgeClient,
 		logger:     logger,
 		sessions:   make(map[string]*Session),
 	}
@@ -45,7 +48,7 @@ func NewService(cfg Config, sttFactory stt.Factory, llmClient llm.Client, logger
 
 func (s *Service) CreateSession() Snapshot {
 	id := randomID()
-	session := newSession(id, s.cfg, s.sttFactory, s.llm, s.logger)
+	session := newSession(id, s.cfg, s.sttFactory, s.llm, s.knowledge, s.logger)
 
 	s.mu.Lock()
 	s.sessions[id] = session

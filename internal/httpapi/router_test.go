@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"openinterview/internal/interview"
+	"openinterview/internal/knowledge"
 	"openinterview/internal/llm"
 	"openinterview/internal/stt"
 )
@@ -21,7 +22,7 @@ func TestHandleHealthIncludesRuntime(t *testing.T) {
 		ExpectedChannels: 1,
 		ExpectedEncoding: "pcm16",
 		MaxChunkBytes:    262144,
-	}, stt.NewFactory(stt.Config{Provider: "mock"}, logger), llm.NewClient(llm.Config{Provider: "mock"}, logger), logger)
+	}, stt.NewFactory(stt.Config{Provider: "mock"}, logger), llm.NewClient(llm.Config{Provider: "mock"}, logger), knowledge.NewClient(knowledge.Config{}, logger), logger)
 
 	handler := NewRouter(Config{
 		Addr: ":8080",
@@ -83,7 +84,7 @@ func TestDeleteSessionRemovesSession(t *testing.T) {
 		ExpectedChannels: 1,
 		ExpectedEncoding: "pcm16",
 		MaxChunkBytes:    262144,
-	}, stt.NewFactory(stt.Config{Provider: "mock"}, logger), llm.NewClient(llm.Config{Provider: "mock"}, logger), logger)
+	}, stt.NewFactory(stt.Config{Provider: "mock"}, logger), llm.NewClient(llm.Config{Provider: "mock"}, logger), knowledge.NewClient(knowledge.Config{}, logger), logger)
 
 	handler := NewRouter(Config{
 		Addr:    ":8080",
