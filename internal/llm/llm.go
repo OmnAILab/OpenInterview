@@ -72,6 +72,8 @@ func NewClient(cfg Config, logger *log.Logger) Client {
 		return newGeminiClient(cfg, logger)
 	case "ollama":
 		return newOllamaClient(cfg, logger)
+	case "vllm":
+		return newOpenAICompatibleClient(cfg, logger)
 	default:
 		return &mockClient{}
 	}

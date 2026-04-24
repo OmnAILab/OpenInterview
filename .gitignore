@@ -1,5 +1,7 @@
 .gocache/
 .gomodcache/
 .env
+.run/
+venv/
 log/
 third_party/sherpa-models/

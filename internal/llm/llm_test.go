@@ -108,4 +108,8 @@ func TestNewClient_SelectsProviderImplementation(t *testing.T) {
 	if _, ok := NewClient(Config{Provider: "ollama"}, logger).(*ollamaClient); !ok {
 		t.Fatal("ollama provider should return *ollamaClient")
 	}
+
+	if _, ok := NewClient(Config{Provider: "vllm"}, logger).(*openAICompatibleClient); !ok {
+		t.Fatal("vllm provider should return *openAICompatibleClient")
+	}
 }

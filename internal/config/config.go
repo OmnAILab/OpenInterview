@@ -157,6 +157,8 @@ func defaultLLMBaseURL(provider string) string {
 		return "https://generativelanguage.googleapis.com/v1beta/openai"
 	case "ollama":
 		return "http://127.0.0.1:11434/v1"
+	case "vllm":
+		return "http://127.0.0.1:8000/v1"
 	default:
 		return "http://127.0.0.1:1234/v1"
 	}
@@ -199,6 +201,8 @@ func providerEnvPrefix(provider string) string {
 		return "GEMINI"
 	case "ollama":
 		return "OLLAMA"
+	case "vllm":
+		return "VLLM"
 	default:
 		return ""
 	}
@@ -234,6 +238,8 @@ func defaultLLMModel(provider string) string {
 		return "gemini-2.0-flash"
 	case "ollama":
 		return "qwen2.5:7b"
+	case "vllm":
+		return "Qwen/Qwen2.5-7B-Instruct"
 	default:
 		return "local-model"
 	}

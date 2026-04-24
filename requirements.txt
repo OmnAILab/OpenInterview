@@ -2,3 +2,4 @@ numpy>=1.26,<3
 sherpa-onnx>=1.12,<2
 sentence-transformers>=5.0,<6
 websockets>=12,<16
+vllm>=0.11,<1; platform_system == "Linux" and python_version < "3.14"

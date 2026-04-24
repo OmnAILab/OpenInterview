@@ -75,6 +75,9 @@ func TestDefaultURLs(t *testing.T) {
 	if got := defaultLLMBaseURL("ollama"); got != "http://127.0.0.1:11434/v1" {
 		t.Fatalf("defaultLLMBaseURL(ollama) = %q", got)
 	}
+	if got := defaultLLMBaseURL("vllm"); got != "http://127.0.0.1:8000/v1" {
+		t.Fatalf("defaultLLMBaseURL(vllm) = %q", got)
+	}
 }
 
 func TestDefaultLLMEndpoint(t *testing.T) {
@@ -89,5 +92,8 @@ func TestDefaultLLMEndpoint(t *testing.T) {
 	}
 	if got := defaultLLMEndpoint("groq"); got != "/chat/completions" {
 		t.Fatalf("defaultLLMEndpoint(groq) = %q", got)
+	}
+	if got := defaultLLMEndpoint("vllm"); got != "/chat/completions" {
+		t.Fatalf("defaultLLMEndpoint(vllm) = %q", got)
 	}
 }
