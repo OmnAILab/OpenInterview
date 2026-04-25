@@ -60,14 +60,14 @@ import json
 import logging
 import socket
 import ssl
+import sys
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Tuple
-
-import numpy as np
-import sherpa_onnx
-import websockets
 
 try:
     from http_server import HttpServer
@@ -75,11 +75,97 @@ except ModuleNotFoundError:
     HttpServer = None
 
 
+DEFAULT_SHERPA_MODEL_DIR = (
+    Path(__file__).resolve().parents[1]
+    / "third_party"
+    / "sherpa-models"
+    / "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20"
+)
+
+
+@contextmanager
+def loading_progress(label):
+    if not sys.stderr.isatty():
+        print(label, flush=True)
+        started = time.monotonic()
+        try:
+            yield
+        except BaseException:
+            elapsed = time.monotonic() - started
+            print(f"{label} failed after {elapsed:.1f}s", flush=True)
+            raise
+        else:
+            elapsed = time.monotonic() - started
+            print(f"{label} done in {elapsed:.1f}s", flush=True)
+        return
+
+    stop = threading.Event()
+    started = time.monotonic()
+    width = 28
+
+    def render():
+        position = 0
+        direction = 1
+        while not stop.wait(0.1):
+            elapsed = time.monotonic() - started
+            bar = [" "] * width
+            for offset in range(7):
+                idx = position + offset
+                if 0 <= idx < width:
+                    bar[idx] = "="
+            sys.stderr.write(f"\r{label} [{''.join(bar)}] {elapsed:5.1f}s")
+            sys.stderr.flush()
+            position += direction
+            if position <= 0 or position + 7 >= width:
+                direction *= -1
+
+    thread = threading.Thread(target=render, daemon=True)
+    thread.start()
+    try:
+        yield
+    except BaseException:
+        status = "failed"
+        raise
+    else:
+        status = "done"
+    finally:
+        stop.set()
+        thread.join()
+        elapsed = time.monotonic() - started
+        sys.stderr.write(f"\r{label} [{'=' * width}] {status} in {elapsed:.1f}s\n")
+        sys.stderr.flush()
+
+
+with loading_progress("importing sherpa streaming dependencies"):
+    import numpy as np
+    import sherpa_onnx
+    import websockets
+
+
 def default_doc_root() -> str:
     local_web = Path(__file__).resolve().parent / "web"
     if local_web.is_dir():
         return str(local_web)
     return ""
+
+
+def apply_default_model_args(args):
+    has_model = any(
+        (
+            args.encoder,
+            args.paraformer_encoder,
+            args.zipformer2_ctc,
+            args.wenet_ctc,
+        )
+    )
+    if has_model:
+        return
+
+    args.encoder = str(DEFAULT_SHERPA_MODEL_DIR / "encoder-epoch-99-avg-1.onnx")
+    args.decoder = str(DEFAULT_SHERPA_MODEL_DIR / "decoder-epoch-99-avg-1.onnx")
+    args.joiner = str(DEFAULT_SHERPA_MODEL_DIR / "joiner-epoch-99-avg-1.onnx")
+    args.tokens = str(DEFAULT_SHERPA_MODEL_DIR / "tokens.txt")
+    print(f"using default Sherpa model: {DEFAULT_SHERPA_MODEL_DIR}", flush=True)
 
 
 def setup_logger(
@@ -174,7 +260,6 @@ def add_model_args(parser: argparse.ArgumentParser):
     parser.add_argument(
         "--tokens",
         type=str,
-        required=True,
         help="Path to tokens.txt",
     )
 
@@ -418,7 +503,9 @@ def get_args():
         help="Optional path to the web root for the demo pages",
     )
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    apply_default_model_args(args)
+    return args
 
 
 def create_recognizer(args) -> sherpa_onnx.OnlineRecognizer:
@@ -861,6 +948,9 @@ def check_args(args):
     else:
         raise ValueError("Please provide a model")
 
+    if not args.tokens:
+        raise ValueError("Please provide --tokens")
+
     if not Path(args.tokens).is_file():
         raise ValueError(f"{args.tokens} does not exist")
 
@@ -879,7 +969,9 @@ def main():
     logging.info(vars(args))
     check_args(args)
 
-    recognizer = create_recognizer(args)
+    with loading_progress("loading Sherpa recognizer"):
+        recognizer = create_recognizer(args)
+    print("Sherpa recognizer ready", flush=True)
 
     port = args.port
     nn_pool_size = args.nn_pool_size

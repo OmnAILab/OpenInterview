@@ -57,6 +57,11 @@ func main() {
 		EmbeddingModel:    cfg.Knowledge.EmbeddingModel,
 		Timeout:           cfg.Knowledge.Timeout,
 	}, logger)
+	if knowledgeMode(cfg) == "local-vector" {
+		if err := knowledge.Warm(context.Background(), knowledgeClient); err != nil {
+			logger.Fatalf("knowledge warmup failed: %v", err)
+		}
+	}
 
 	service := interview.NewService(interview.Config{
 		MaxTurns:         cfg.Session.MaxTurns,

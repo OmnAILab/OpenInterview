@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import json
 import os
+import sys
+import threading
+import time
+from contextlib import contextmanager
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-
-from sentence_transformers import SentenceTransformer
 
 
 HOST = os.getenv("ST_SERVER_HOST", "127.0.0.1")
@@ -14,9 +16,91 @@ MODEL_NAME = os.getenv(
     "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
 )
 DEVICE = os.getenv("ST_DEVICE") or None
+CACHE_FOLDER = os.getenv("ST_CACHE_FOLDER") or None
 
-print(f"loading model: {MODEL_NAME}")
-MODEL = SentenceTransformer(MODEL_NAME, device=DEVICE)
+
+def env_bool(name, default=False):
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+LOCAL_FILES_ONLY = env_bool("ST_LOCAL_FILES_ONLY")
+
+
+@contextmanager
+def loading_progress(label):
+    if not sys.stderr.isatty():
+        print(label, flush=True)
+        started = time.monotonic()
+        try:
+            yield
+        except BaseException:
+            elapsed = time.monotonic() - started
+            print(f"{label} failed after {elapsed:.1f}s", flush=True)
+            raise
+        else:
+            elapsed = time.monotonic() - started
+            print(f"{label} done in {elapsed:.1f}s", flush=True)
+        return
+
+    stop = threading.Event()
+    started = time.monotonic()
+    width = 28
+
+    def render():
+        position = 0
+        direction = 1
+        while not stop.wait(0.1):
+            elapsed = time.monotonic() - started
+            bar = [" "] * width
+            for offset in range(7):
+                idx = position + offset
+                if 0 <= idx < width:
+                    bar[idx] = "="
+            sys.stderr.write(f"\r{label} [{''.join(bar)}] {elapsed:5.1f}s")
+            sys.stderr.flush()
+            position += direction
+            if position <= 0 or position + 7 >= width:
+                direction *= -1
+
+    thread = threading.Thread(target=render, daemon=True)
+    thread.start()
+    try:
+        yield
+    except BaseException:
+        status = "failed"
+        raise
+    else:
+        status = "done"
+    finally:
+        stop.set()
+        thread.join()
+        elapsed = time.monotonic() - started
+        sys.stderr.write(f"\r{label} [{'=' * width}] {status} in {elapsed:.1f}s\n")
+        sys.stderr.flush()
+
+
+with loading_progress("importing sentence-transformers dependencies"):
+    from sentence_transformers import SentenceTransformer
+
+load_kwargs = {}
+if DEVICE:
+    load_kwargs["device"] = DEVICE
+if CACHE_FOLDER:
+    load_kwargs["cache_folder"] = CACHE_FOLDER
+if LOCAL_FILES_ONLY:
+    load_kwargs["local_files_only"] = True
+
+if CACHE_FOLDER:
+    print(f"model cache folder: {CACHE_FOLDER}", flush=True)
+if LOCAL_FILES_ONLY:
+    print("model loading mode: local files only", flush=True)
+
+with loading_progress(f"loading model: {MODEL_NAME}"):
+    MODEL = SentenceTransformer(MODEL_NAME, **load_kwargs)
+print(f"model ready: {MODEL_NAME}", flush=True)
 
 
 def encode_texts(payload):
@@ -108,5 +192,5 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"listening on http://{HOST}:{PORT}")
+    print(f"listening on http://{HOST}:{PORT}", flush=True)
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()

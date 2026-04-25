@@ -38,6 +38,10 @@ type Client interface {
 	Retrieve(ctx context.Context, query string) ([]Document, error)
 }
 
+type warmableClient interface {
+	Warm(ctx context.Context) error
+}
+
 func NewClient(cfg Config, logger *log.Logger) Client {
 	cfg.Path = strings.TrimSpace(cfg.Path)
 	cfg.SearchEndpoint = strings.TrimSpace(cfg.SearchEndpoint)
@@ -63,6 +67,18 @@ func NewClient(cfg Config, logger *log.Logger) Client {
 		embedder: remoteEmbedder{cfg: cfg, client: &http.Client{Timeout: cfg.Timeout}},
 		logger:   logger,
 	}
+}
+
+// Warm eagerly initializes any in-memory retrieval state owned by the client.
+// Clients without preload work are treated as no-ops.
+func Warm(ctx context.Context, client Client) error {
+	if client == nil {
+		return nil
+	}
+	if warmable, ok := client.(warmableClient); ok {
+		return warmable.Warm(ctx)
+	}
+	return nil
 }
 
 type noopClient struct{}
@@ -147,6 +163,10 @@ type localVectorClient struct {
 type indexedDocument struct {
 	doc       Document
 	embedding []float32
+}
+
+func (c *localVectorClient) Warm(ctx context.Context) error {
+	return c.ensureLoaded(ctx)
 }
 
 func (c *localVectorClient) Retrieve(ctx context.Context, query string) ([]Document, error) {

@@ -36,6 +36,9 @@ func main() {
 		EmbeddingModel:    cfg.Knowledge.EmbeddingModel,
 		Timeout:           cfg.Knowledge.Timeout,
 	}, logger)
+	if err := knowledge.Warm(context.Background(), client); err != nil {
+		logger.Fatalf("knowledge warmup failed: %v", err)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/healthz", func(w http.ResponseWriter, _ *http.Request) {
